@@ -1,0 +1,3110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Medication Reconciliation Tool</title>
+    <style>
+        /* Container styling for split-screen layout */
+.container {
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Column styling for each medication list */
+.column {
+    width: 48%;
+    padding: 10px;
+    border: 1px solid #ccc;
+}
+
+/* Individual medication entry styling */
+.medication-entry {
+    margin-bottom: 10px;
+    padding: 5px;
+    background-color: #f0f0f0;
+}
+
+/* Table styling for formatted display */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.data-table th, .data-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.data-table th {
+    background-color: #f2f2f2;
+}
+
+/* Utility classes */
+.hidden {
+    display: none;
+}
+
+.error-row {
+    background-color: #ffe6e6;
+}
+
+.merged-row {
+    background-color: #e6ffe6;
+}
+
+/* Input area styling */
+textarea {
+    width: 100%;
+    font-family: monospace;
+    white-space: pre;
+}
+
+/* Button styling */
+button {
+    margin: 5px;
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+/* Comparison Results Styling */
+#comparisonResults {
+    margin: 20px;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+#comparisonResults h2 {
+    color: #333;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+#comparisonResults h3 {
+    color: #666;
+    margin: 15px 0;
+    padding-bottom: 5px;
+    border-bottom: 2px solid #4CAF50;
+}
+
+#comparisonResults .data-table {
+    margin-bottom: 30px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+#comparisonResults .data-table th {
+    background-color: #4CAF50;
+    color: white;
+}
+
+#comparisonResults .data-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+#comparisonResults .data-table tr:hover {
+    background-color: #f5f5f5;
+}
+/* Add to your existing CSS */
+.comparison-table {
+    margin-bottom: 30px;
+}
+
+.medication-group td {
+    background-color: #f8f8f8;
+}
+
+.medication-subrow td {
+    border-top: 1px dashed #ddd;
+}
+
+.medication-detail {
+    padding: 5px 0;
+}
+
+.medication-detail .original-name {
+    font-weight: bold;
+    color: #333;
+}
+
+.medication-detail .instructions {
+    color: #666;
+    margin-top: 3px;
+}
+
+.medication-detail .comments {
+    color: #888;
+    font-size: 0.9em;
+    margin-top: 3px;
+    font-style: italic;
+}
+
+/* Style for the standard name column */
+.comparison-table td:first-child {
+    background-color: #f0f7f0;
+    font-weight: bold;
+    color: #2e7d32;
+}
+
+/* Hover effects */
+.comparison-table tr:hover td {
+    background-color: #f5f5f5;
+}
+
+.comparison-table tr:hover td:first-child {
+    background-color: #e8f5e9;
+}
+    </style>
+</head>
+<body>
+    <h1>Medication Reconciliation Tool</h1>
+    <div class="container">
+        <div class="column">
+            <h2>List 1</h2>
+            <textarea id="list1" rows="20" cols="50" 
+                onpaste="handlePaste(event, 1)" 
+                placeholder="Paste medication list here"></textarea>
+            <button onclick="processList(1)">Process List 1</button>
+            <div id="table1Container"></div>
+        </div>
+        <div class="column">
+            <h2>List 2</h2>
+            <textarea id="list2" rows="20" cols="50" 
+                onpaste="handlePaste(event, 2)"
+                placeholder="Paste medication list here"></textarea>
+            <button onclick="processList(2)">Process List 2</button>
+            <div id="table2Container"></div>
+        </div>
+    </div>
+    <div style="text-align: center; margin: 20px;">
+        <button onclick="compareMedicationLists()" style="font-size: 1.2em; padding: 10px 20px;">
+            Compare Lists
+        </button>
+    </div>
+    <script>
+        // Medication dictionary for future use in matching medications
+        const medicationDict = {
+    "medications": {
+        "abacavir": ["abacavir", "ziagen"],
+    "abacavir/lamivudine": ["abacavir/lamivudine", "kivexa", "epzicom"],
+    "abatacept": ["abatacept", "orencia"],
+    "abemaciclib": ["abemaciclib", "verzenios", "verzenio"],
+    "abiraterone": ["abiraterone", "zytiga"],
+    "acalabrutinib": ["acalabrutinib", "calquence"],
+    "acamprosate": ["acamprosate", "campral"],
+    "acarbose": ["acarbose", "glucobay"],
+    "accufusor": ["accufusor"],
+    "accu-chek": ["accu-chek"],
+    "acenocoumarol": ["acenocoumarol", "sinthrome", "nicoumalone"],
+    "acetylcysteine": ["acetylcysteine", "parvolex", "nacsys", "n-acetylcysteine", "nac"],
+    "acetazolamide": ["acetazolamide", "diamox"],
+    "acetic acid": ["acetic acid"],
+    "acetone": ["acetone"],
+    "acetylcholine": ["acetylcholine"],
+    "aciclovir": ["aciclovir", "acyclovir", "zovirax", "acyvir"],
+    "acid citrate dextrose": ["acid citrate dextrose", "Acid Cit. Dextrose"],
+    "acipimox": ["acipimox", "olbetam"],
+    "acitretin": ["acitretin", "neotigason"],
+    "aclidinium": ["aclidinium", "eklira", "bretaris"],
+    "acriflex": ["acriflex"],
+    "actimel": ["actimel"],
+    "activated charcoal": ["activated charcoal", "charcodote", "carbomix"],
+    "actifed multi-action": ["actifed multi-action"],
+    "adalimumab": ["adalimumab", "humira", "amgevita", "hulio", "hyrimoz", "idacio", "imraldi"],
+    "adapalene": ["adapalene", "differin"],
+    "additive a": ["additive a"],
+    "addaven": ["addaven"],
+    "additrace": ["additrace"],
+    "adenosine": ["adenosine", "adenocor"],
+    "adrenaline": ["adrenaline", "epinephrine", "anapen", "emerade", "epipen", "jext"],
+    "aerochamber": ["aerochamber"],
+    "afatinib": ["afatinib", "giotrif"],
+    "aflibercept": ["aflibercept", "eylea", "zaltrap"],
+    "ajmaline": ["ajmaline"],
+    "akynzeo": ["akynzeo", "netupitant/palonosetron"],
+    "alaris": ["alaris"],
+    "albendazole": ["albendazole", "eskazole"],
+    "albumin": ["albumin", "alburex", "albutein", "zenalb"],
+    "alcohol absolute": ["alcohol absolute"],
+    "alectinib": ["alectinib", "alecensa"],
+    "alemtuzumab": ["alemtuzumab", "lemtrada", "campath"],
+    "alendronic acid": ["alendronic acid", "alendronate", "fosamax", "binosto"],
+    "alfacalcidol": ["alfacalcidol", "one-alpha"],
+    "alfentanil": ["alfentanil", "rapifen"],
+    "alfuzosin": ["alfuzosin", "xatral", "besavar"],
+    "alhydran": ["alhydran"],
+    "alimemazine": ["alimemazine", "theralen", "vallergan"],
+    "alirocumab": ["alirocumab", "praluent"],
+    "aliskiren": ["aliskiren", "rasilez"],
+    "alitretinoin": ["alitretinoin", "toctino"],
+    "alliance calcium": ["alliance calcium"],
+    "allopurinol": ["allopurinol", "zyloric", "uricto"],
+    "allogenic serum": ["allogenic serum"],
+        "almotriptan": ["almotriptan", "almogran"],
+    "alogliptin": ["alogliptin", "vipidia"],
+    "alpelisib": ["alpelisib", "piqray"],
+    "alpha tocopherol": ["alpha tocopherol", "vitamin e"],
+    "alphosyl hc": ["alphosyl hc"],
+    "alprostadil": ["alprostadil", "caverject", "muse", "vitaros", "prostin VR"],
+    "alteplase": ["alteplase", "actilyse", "metalyse"],
+    "altraplen": ["altraplen"],
+    "aluminium chloride": ["aluminium chloride", "anhydrol forte", "driclor"],
+    "aluminium hydroxide": ["aluminium hydroxide", "alu-cap"],
+    "alverine": ["alverine", "spasmonal"],
+    "amantadine": ["amantadine", "symmetrel"],
+    "ambrisentan": ["ambrisentan", "volibris"],
+    "amersham": ["amersham"],
+    "amifampridine": ["amifampridine", "firdapse"],
+    "amikacin": ["amikacin", "amikin"],
+    "amiloride": ["amiloride", "amilamont"],
+    "amiloride/cyclopenthiazide": ["amiloride/cyclopenthiazide", "navispare"],
+    "aminophylline": ["aminophylline", "phyllocontin", "aminophylline modified release"],
+    "aminocaproic acid": ["aminocaproic acid"],
+    "amiodarone": ["amiodarone", "cordarone x"],
+    "amisulpride": ["amisulpride", "solian", "amipride"],
+    "amitriptyline": ["amitriptyline", "elavil", "tryptizol", "lentizol"],
+    "amlodipine": ["amlodipine", "istin", "amlostin", "vascalpha", "exforge"],
+    "ammonium chloride": ["ammonium chloride"],
+    "amobarbital": ["amobarbital"],
+    "amorolfine": ["amorolfine", "loceryl", "curanail"],
+    "amoxicillin": ["amoxicillin", "amoxil", "amoxycillin"],
+    "amphotericin": ["amphotericin", "fungizone", "ambisome", "abelcet"],
+    "amsacrine": ["amsacrine"],
+    "anagrelide": ["anagrelide", "xagrid"],
+    "anakinra": ["anakinra", "kineret"],
+    "anaphylaxis shock pack": ["anaphylaxis shock pack"],
+    "anastrozole": ["anastrozole", "arimidex"],
+    "anbesol": ["anbesol"],
+    "andexanet": ["andexanet", "ondexxya"],
+    "androstanolone": ["androstanolone"],
+    "anoro": ["anoro", "umeclidinium/vilanterol"],
+    "antithymocyte globulin": ["antithymocyte globulin", "a.t.g horse", "thymoglobuline", "grafalon"],
+    "antimicrobial mat": ["antimicrobial mat"],
+    "antacid/oxetacaine": ["antacid/oxetacaine"],
+    "antox": ["antox"],
+    "anusol": ["anusol"],
+    "apalutamide": ["apalutamide", "erleada"],
+    "apixaban": ["apixaban", "eliquis"],
+    "apomorphine": ["apomorphine", "apo-go", "dacepton", "kinzide"],
+    "apraclonidine": ["apraclonidine", "iopidine"],
+    "apremilast": ["apremilast", "otezla"],
+    "aprepitant": ["aprepitant", "emend"],
+    "aproderm": ["aproderm"],
+    "aptamil": ["aptamil"],
+    "arachis oil": ["arachis oil", "peanut oil"],
+    "argatroban": ["argatroban", "exembol"],
+    "argipressin": ["argipressin", "synthetic vasopressin", "empressin"],
+    "arginine": ["arginine", "l-arginine"],
+    "aripiprazole": ["aripiprazole", "abilify", "abilify maintena"],
+    "arsenic trioxide": ["arsenic trioxide", "trisenox"],
+    "artesunate": ["artesunate"],
+    "arthrotec": ["arthrotec", "diclofenac/misoprostol"],
+    "articaine/adrenaline": ["articaine/adrenaline", "septanest"],
+    "artificial saliva": ["artificial saliva", "biotene", "glandosane", "saliveze"],
+    "asasantin": ["asasantin", "dipyridamole/aspirin"],
+    "ascorbic acid": ["ascorbic acid", "vitamin c"],
+    "ascorbic acid/zinc": ["ascorbic acid/zinc"],
+    "asciminib": ["asciminib", "scemblix"],
+    "asenapine": ["asenapine", "sycrest"],
+    "asparaginase": ["asparaginase", "spectrila", "erwinase"],
+    "aspirin": ["aspirin", "acetylsalicylic acid", "caprin", "micropirin", "nu-seals", "dispersible aspirin"],
+    "atazanavir": ["atazanavir", "reyataz"],
+    "atenolol": ["atenolol", "tenormin", "beta-cardone"],
+    "atezolizumab": ["atezolizumab", "tecentriq"],
+    "atogepant": ["atogepant", "aquipta"],
+    "atomoxetine": ["atomoxetine", "strattera"],
+    "atorvastatin": ["atorvastatin", "lipitor"],
+    "atosiban": ["atosiban", "tractocile"],
+    "atovaquone": ["atovaquone", "wellvone"],
+    "atovaquone/proguanil": ["atovaquone/proguanil", "malarone"],
+    "atracurium": ["atracurium", "atracurium besilate", "tracrium"],
+    "atropine": ["atropine", "atropine sulphate", "minims atropine"],
+    "autodrop": ["autodrop"],
+    "autosqueeze": ["autosqueeze"],
+    "avacopan": ["avacopan", "tavneos"],
+    "avanafil": ["avanafil", "spedra"],
+    "avatrombopag": ["avatrombopag", "doptelet"],
+    "aveeno": ["aveeno"],
+    "avelumab": ["avelumab", "bavencio"],
+    "aviptadil/phentolamine": ["aviptadil/phentolamine", "invicorp"],
+    "axitinib": ["axitinib", "inlyta"],
+    "aymes actasolve": ["aymes actasolve"],
+    "aymes actagain": ["aymes actagain"],
+    "aymes shake": ["aymes shake"],
+    "azacitidine": ["azacitidine", "vidaza"],
+    "azarga": ["azarga", "brinzolamide/timolol"],
+    "azathioprine": ["azathioprine", "imuran"],
+    "azelastine": ["azelastine", "optilast", "rhinolast", "dymista"],
+    "azelaic acid": ["azelaic acid", "finacea", "skinoren"],
+    "azithromycin": ["azithromycin", "zithromax"],
+    "azowipes": ["azowipes"],
+    "aztreonam": ["aztreonam", "azactam", "cayston"],
+        "b-ketone": ["b-ketone"],
+    "baclofen": ["baclofen", "lioresal", "lyflex", "gablofen"],
+    "prescription bag": ["prescription bag"],
+    "bum bag": ["bum bag"],
+    "brown bag": ["brown bag"],
+    "sterile ziplock bag": ["sterile ziplock bag"],
+    "balanced salt solution": ["balanced salt solution", "bss"],
+    "balneum": ["balneum"],
+    "balsalazide": ["balsalazide", "colazide"],
+    "bambuterol": ["bambuterol", "bambec"],
+    "baricitinib": ["baricitinib", "olumiant"],
+    "barium sulphate": ["barium sulphate", "baritop"],
+    "baxa pharmacy dispensing pin": ["baxa pharmacy dispensing pin"],
+    "baxter infusor": ["baxter ce", "baxter infusor"],
+    "bcg": ["bcg", "bcg tice", "bcg-medac", "connaught bcg", "onco-tice"],
+    "beclometasone": ["beclometasone", "clenil", "qvar", "kelhale", "beclomethasone", "asmabec", "beconase", "soprobec"],
+    "bedaquiline": ["bedaquiline", "sirturo"],
+    "belantamab": ["belantamab mafodotin", "blenrep"],
+    "belimumab": ["belimumab", "benlysta"],
+    "bempedoic acid": ["bempedoic acid", "nilemdo"],
+    "bempedoic/ezetimibe": ["bempedoic/ezetimibe", "bempedoic acid/ezetimibe", "nustendi"],
+    "bendamustine": ["bendamustine", "levact"],
+    "bendroflumethiazide": ["bendroflumethiazide", "bendrofluazide", "aprinox", "neo-naclex"],
+    "benperidol": ["benperidol", "anquil"],
+    "benralizumab": ["benralizumab", "fasenra"],
+    "benzydamine": ["benzydamine", "difflam"],
+    "benzylpenicillin": ["benzylpenicillin", "penicillin g", "crystapen"],
+    "benzathine penicillin": ["benzathine penicillin", "Benzathine Pen"],
+    "benzbromarone": ["benzbromarone"],
+    "beriplex": ["beriplex"],
+    "berotralstat": ["berotralstat", "orladeyo"],
+    "betamethasone": ["betamethasone", "betnesol", "betnovate", "beta-gel", "betacap", "betesil", "betnovate-rd", "vistamethasone"],
+    "betaxolol": ["betaxolol", "betoptic"],
+    "betahistine": ["betahistine", "serc"],
+    "betaine": ["betaine", "cystadane"],
+    "betamethasone/clioquinol": ["betamethasone/clioquinol", "betnovate-c"],
+    "betamethasone/neomycin": ["betamethasone/neomycin", "betnovate-n", "Betnesol-N"],
+    "bevacizumab": ["bevacizumab", "avastin", "mvasi", "zirabev"],
+    "bexarotene": ["bexarotene", "targretin"],
+    "bezafibrate": ["bezafibrate", "bezalip", "fibrazate"],
+    "bicalutamide": ["bicalutamide", "casodex"],
+    "bictegravir/emtricitabine/tenofovir": ["bictegravir/emtricitabine/tenofovir", "biktarvy"],
+    "bimatoprost": ["bimatoprost", "lumigan", "ganfort"],
+    "biocide": ["biocide"],
+    "biotin": ["biotin", "vitamin h", "vitamin b7"],
+    "bisacodyl": ["bisacodyl", "dulcolax"],
+    "bismuth": ["bismuth salicylate", "bismuth iodoform", "de-noltab"],
+    "bisoprolol": ["bisoprolol", "cardicor", "congescor"],
+    "bivalirudin": ["bivalirudin", "angiox"],
+    "bleomycin": ["bleomycin", "bleo-kyowa"],
+    "blinatumomab": ["blinatumomab", "blincyto"],
+    "boceprevir": ["boceprevir", "victrelis"],
+    "boric acid": ["boric acid"],
+    "bortezomib": ["bortezomib", "velcade"],
+    "bosentan": ["bosentan", "tracleer"],
+    "bosutinib": ["bosutinib", "bosulif"],
+    "botulinum toxin": ["botulinum a", "botulinum b", "dysport", "botox", "xeomin", "vistabel", "bocouture", "neurobloc"],
+    "brentuximab": ["brentuximab vedotin", "adcetris"],
+    "brevinor": ["brevinor"],
+    "brigatinib": ["brigatinib", "alunbrig"],
+    "brimonidine": ["brimonidine", "alphagan", "mirvaso"],
+    "brinzolamide": ["brinzolamide", "azopt"],
+    "brivaracetam": ["brivaracetam", "briviact"],
+    "brodalumab": ["brodalumab", "kyntheum"],
+    "brolucizumab": ["brolucizumab", "beovu"],
+    "bromocriptine": ["bromocriptine", "parlodel"],
+    "bromfenac": ["bromfenac", "yellox"],
+    "budesonide": ["pulmicort", "budelin", "rhinocort", "entocort", "budenofalk"],
+    "budesonide/formoterol": ["budesonide/formoterol", "symbicort", "duoresp", "fobumix", "wockair"],
+    "buffered sodium chloride": ["buffered sodium chloride"],
+    "bumetanide": ["bumetanide"],
+    "bupivacaine": ["bupivacaine", "marcain"],
+    "bupivacaine/adrenaline": ["bupivacaine/adrenaline", "marcain with adrenaline"],
+    "bupivacaine/fentanyl": ["bupivacaine/fentanyl"],
+    "buprenorphine": ["buprenorphine", "subutex", "temgesic", "butrans", "bupeaze", "buvidal", "prefibin", "transtec"],
+    "bupropion": ["bupropion", "zyban"],
+    "buserelin": ["buserelin", "suprecur", "suprefact"],
+    "buspirone": ["buspirone", "buspar"],
+    "busulfan": ["busulfan", "myleran", "busilvex"],
+        "c1-esterase inhibitor": ["c1-esterase inhibitor", "cinryze", "berinert", "ruconest"],
+    "cabazitaxel": ["cabazitaxel", "jevtana"],
+    "cabergoline": ["cabergoline", "dostinex"],
+    "cabozantinib": ["cabozantinib", "cabometyx", "cometriq"],
+    "cabotegravir": ["cabotegravir", "vocabria"],
+    "caffeine": ["caffeine citrate", "caffeine sodium benzoate", "caffeine na benzoate", "peyona"],
+    "calamine": ["calamine"],
+    "calcipotriol/betamethasone": ["calcipotriol/betamethasone", "enstilar", "dovobet", "xamiol"],
+    "calcium acetate": ["calcium acetate", "phosex", "renacet", "phylorinol"],
+    "calcium carbonate": ["calcium carbonate", "calcium", "Calcium Carb.", "adcal", "calcichew", "cacit", "caltrate", "calceos", "calcium-500"],
+    "calcium chloride": ["calcium chloride"],
+    "calcium gluconate": ["calcium gluconate"],
+    "calcium/vitamin d3": ["calcium/vitamin d3", "Calcium Carb/Vit D3", "calcium carbonate/colecal", "Calc Carb/Vit D3", "calcium/colecalciferol", "calc/colecalciferol", "calcium/colecalciferol", "calcichew d3", "calfovit d3", "cacit d3", "calcium/vitamin d3", "calcichew-d3", "calfovit-d3", "cacit-d3", "adcal-d3", "calceos", "natecal", "calcichew d3 forte", "evacal d3"],
+    "calcium/ergocalciferol": ["calcium/ergocalciferol"],
+    "calcitonin": ["calcitonin", "calcitonin salmon", "miacalcic"],
+    "calcitriol": ["calcitriol", "rocaltrol", "silkis"],
+    "calmurid": ["calmurid"],
+    "calogen": ["calogen"],
+    "calotherm": ["calotherm", "caloclear"],
+    "canagliflozin": ["canagliflozin", "invokana"],
+    "candesartan": ["candesartan", "amias", "atacand"],
+    "cannabidiol": ["cannabidiol", "epidyolex", "sativex"],
+    "capasal": ["capasal"],
+    "capd": ["capd balance", "capd sleep safe", "capd stay safe"],
+    "capecitabine": ["capecitabine", "xeloda"],
+    "caphosol": ["caphosol"],
+    "caplacizumab": ["caplacizumab", "cablivi"],
+    "capsaicin": ["capsaicin", "zacin", "axsain", "qutenza"],
+    "captopril": ["captopril", "capoten", "ecopace"],
+    "carbomer": ["carbomer", "viscotears", "gel tears", "clinitas carbomer"],
+    "carbamazepine": ["carbamazepine", "tegretol", "carbagen"],
+    "carbimazole": ["carbimazole", "neomercazole"],
+    "carbocisteine": ["carbocisteine", "mucodyne"],
+    "carboplatin": ["carboplatin", "paraplatin"],
+    "carboprost": ["carboprost", "hemabate"],
+    "carbex": ["carbex"],
+    "carfilzomib": ["carfilzomib", "kyprolis"],
+    "cariprazine": ["cariprazine", "reagila"],
+    "carmellose": ["carmellose", "optive", "carmize", "celluvisc", "lumecare", "melophthal", "optho-lube", "viscotears"],
+    "carnoys solution": ["carnoys solution"],
+    "levocarnitine": ["levocarnitine", "carnitor"],
+    "carobel": ["carobel"],
+    "carteolol": ["carteolol", "teoptic"],
+    "carvedilol": ["carvedilol", "eucardic"],
+    "casirivimab/imdevimab": ["casirivimab/imdevimab", "REGEN‑COV", "ronapreve"],
+    "caspofungin": ["caspofungin", "cancidas"],
+    "cefalexin": ["cefalexin", "cephalexin", "ceporex", "keflex"],
+    "cefixime": ["cefixime", "suprax"],
+    "cefotaxime": ["cefotaxime", "claforan"],
+    "cefradine": ["cefradine", "velosef"],
+    "ceftazidime": ["ceftazidime", "fortum", "kefadim"],
+    "ceftriaxone": ["ceftriaxone", "rocephin"],
+    "ceftazidime/avibactam": ["ceftazidime/avibactam", "zavicefta"],
+    "ceftolozane/tazobactam": ["ceftolozane/tazobactam", "zerbaxa"],
+    "cefuroxime": ["cefuroxime", "zinacef", "zinnat", "cefuroxim"],
+    "celecoxib": ["celecoxib", "celebrex"],
+    "celiprolol": ["celiprolol", "celectol"],
+    "cemiplimab": ["cemiplimab", "libtayo"],
+    "cenobamate": ["cenobamate", "ontozry"],
+    "ceritinib": ["ceritinib", "zykadia"],
+    "cernevit": ["cernevit"],
+    "certolizumab": ["certolizumab pegol", "cimzia"],
+    "cerumol": ["cerumol"],
+    "cetirizine": ["cetirizine", "zirtek", "benadryl allergy"],
+    "cetraben": ["cetraben"],
+    "cetuximab": ["cetuximab", "erbitux"],
+    "chlorambucil": ["chlorambucil", "leukeran"],
+    "chlordiazepoxide": ["chlordiazepoxide", "librium"],
+    "chloral hydrate": ["chloral hydrate", "welldorm"],
+    "chlorhexidine": ["chlorhexidine", "corsodyl", "chlorhex", "unisept", "hibitane"],
+    "chloramphenicol": ["chloramphenicol", "chloromycetin", "minims chloramphenicol"],
+    "chlortetracycline": ["chlortetracycline", "aureomycin"],
+    "chlorphenamine": ["chlorphenamine", "piriton", "chlorpheniramine"],
+    "chlortalidone": ["chlortalidone", "chlorthalidone", "hygroton"],
+    "chloroform": ["chloroform"],
+    "chlorpromazine": ["chlorpromazine", "largactil"],
+    "chloroquine": ["chloroquine phosphate", "avloclor", "malarivon"],
+    "chlorothiazide": ["chlorothiazide"],
+    "cholic acid": ["cholic acid", "orphacol"],
+    "choline salicylate": ["choline salicylate", "bonjela"],
+    "chorionic gonadotrophin": ["chorionic gonadotrophin", "choriogonadotropin alfa", "ovitrelle", "pregnyl"],
+    "ciclosporin": ["ciclosporin", "deximune", "neoral", "vanquoral", "sandimmun", "cyclosporin", "cyclosporine"],
+    "ciclesonide": ["ciclesonide", "alvesco"],
+    "cilest": ["cilest"],
+    "cilique": ["cilique"],
+    "cilostazol": ["cilostazol", "pletal"],
+    "cimetidine": ["cimetidine", "tagamet"],
+    "cinacalcet": ["cinacalcet", "mimpara"],
+    "cinnarizine": ["cinnarizine", "stugeron"],
+    "ciprofloxacin": ["ciprofloxacin", "ciproxin"],
+    "ciprofloxacin/dexamethasone": ["ciprofloxacin/dexamethasone", "cilodex"],
+    "ciprofibrate": ["ciprofibrate"],
+    "cisplatin": ["cisplatin"],
+    "citalopram": ["citalopram", "cipramil"],
+    "citric acid": ["citric acid"],
+    "cladribine": ["cladribine", "mavenclad", "leustat", "litak"],
+    "clarithromycin": ["clarithromycin", "klaricid", "xetinin"],
+    "climagest": ["climagest"],
+    "clinimix": ["clinimix"],
+    "clindamycin": ["clindamycin", "dalacin", "zindaclin"],
+    "clobetasol": ["clobetasol", "dermovate", "etrivex"],
+    "clobetasone": ["clobetasone", "eumovate"],
+    "clobazam": ["clobazam", "frisium", "tapclob"],
+    "clofarabine": ["clofarabine", "evoltra"],
+    "clofazimine": ["clofazimine", "lamprene"],
+    "clomipramine": ["clomipramine", "anafranil"],
+    "clomethiazole": ["clomethiazole", "heminevrin"],
+    "clomifene": ["clomifene", "clomid"],
+    "clonidine": ["clonidine", "catapres"],
+    "clonazepam": ["clonazepam", "rivotril"],
+    "clopidogrel": ["clopidogrel", "plavix"],
+    "cloral betaine": ["cloral betaine"],
+    "clotrimazole": ["clotrimazole", "canesten"],
+    "clove oil": ["clove oil"],
+    "clozapine": ["clozapine", "clozaril", "denzapine", "zaponex"],
+       "co-amoxiclav": ["co-amoxiclav", "augmentin", "amoxicillin/clavulanic acid"],
+    "amiloride/furosemide": ["amiloride/furosemide", "co-amilofruse", "frumil"],
+    "coal tar": ["coal tar", "exorex", "psoriderm", "cocois"],
+    "amiloride/hydrochlorothiazide": ["amiloride/hydrochlorothiazide", "co-amilozide", "moduretic"],
+    "irbesartan/hydrochlorothiazide": ["irbesartan/hydrochlorothiazide", "co-aprovel"],
+    "levodopa/benserazide": ["levodopa/benserazide", "co-beneldopa", "madopar"],
+    "cobicistat": ["cobicistat", "tybost"],
+    "cocaine": ["cocaine"],
+    "levodopa/carbodopa": ["levodopa/carbodopa", "co-careldopa", "duodopa", "sinemet", "caramet"],
+    "cocois": ["cocois", "sebco"],
+    "codeine/paracetamol": ["codeine/paracetamol", "co-codamol", "solpadol", "zapain", "kapake", "tylex"],
+    "dantron/poloxamer": ["dantron/poloxamer", "co-danthramer", "codalax"],
+    "codeine": ["codeine", "codeine phosphate"],
+    "dihydrocodeine/paracetamol": ["dihydrocodeine/paracetamol", "co-dydramol", "paramol", "remedeine"],
+    "colchicine": ["colchicine", "colcrys"],
+    "colecalciferol": ["colecalciferol", "vitamin d3", "fultium", "invita d3", "thorens", "stexerol"],
+    "colestipol": ["colestipol", "colestid"],
+    "colesevelam": ["colesevelam", "cholestagel"],
+    "colestyramine": ["colestyramine", "questran", "cholestyramine"],
+    "colistin": ["colistin", "colistimethate", "colomycin", "promixin"],
+    "collagenase": ["collagenase", "xiapex"],
+    "co-magaldrox": ["co-magaldrox", "maalox", "mucogel"],
+    "dutasteride/tamsulosin": ["dutasteride/tamsulosin", "combodart"],
+    "lamivudine/zidovudine": ["lamivudine/zidovudine", "combivir"],
+    "combigan": ["combigan", "brimonidine/timolol"],
+    "compound sodium lactate": ["compound sodium lactate", "hartmann's"],
+    "complan": ["complan"],
+    "competact": ["competact", "pioglitazone/metformin"],
+    "conestat alfa": ["conestat alfa", "ruconest"],
+    "copaxone": ["copaxone", "glatiramer"],
+    "co-phenotrope": ["co-phenotrope", "diphenoxylate/atropine", "lomotil"],
+    "copper histidine": ["copper-histidine"],
+    "co-proxamol": ["co-proxamol", "dextropropoxyphene/paracetamol"],
+    "corticorelin": ["corticorelin"],
+    "cosopt": ["cosopt", "dorzolamide/timolol"],
+    "co-trimoxazole": ["co-trimoxazole", "septrin", "trimethoprim/sulfamethoxazole"],
+    "co-tenidone": ["co-tenidone", "atenolol/chlortalidone", "tenoret", "tenoretic"],
+    "covid-19 vaccine": ["comirnaty", "spikevax", "pfizer-biontech", "moderna"],
+    "creon": ["creon", "pancreatin", "Pancrex V", "Nutrizym 22"],
+    "crisantaspase": ["crisantaspase", "erwinase"],
+    "crizotinib": ["crizotinib", "xalkori"],
+    "crotamiton": ["crotamiton", "eurax"],
+    "cyanocobalamin": ["cyanocobalamin", "vitamin b12"],
+    "cyclopentolate": ["cyclopentolate", "minims cyclopentolate"],
+    "cyclophosphamide": ["cyclophosphamide", "endoxana"],
+    "cycloserine": ["cycloserine"],
+    "cyclizine": ["cyclizine", "valoid"],
+    "cyproheptadine": ["cyproheptadine", "periactin"],
+    "cyproterone": ["cyproterone acetate", "cyprostat", "androcur"],
+    "cytarabine": ["cytarabine", "ara-c", "cytosine arabinoside"],
+    "dabigatran": ["dabigatran etexilate", "pradaxa"],
+    "dabrafenib": ["dabrafenib", "tafinlar"],
+    "dacarbazine": ["dacarbazine", "dtic"],
+    "daclatasvir": ["daclatasvir", "daklinza"],
+    "dactinomycin": ["dactinomycin", "actinomycin d", "cosmegen"],
+    "daktacort": ["daktacort", "miconazole/hydrocortisone"],
+    "dalbavancin": ["dalbavancin", "xydalba"],
+    "dalteparin": ["dalteparin", "fragmin"],
+    "danazol": ["danazol", "danogar"],
+    "danaparoid": ["danaparoid", "orgaran"],
+    "dantrolene": ["dantrolene", "dantrium"],
+    "dapagliflozin": ["dapagliflozin", "forxiga"],
+    "dapoxetine": ["dapoxetine", "priligy"],
+    "dapsone": ["dapsone"],
+    "daptomycin": ["daptomycin", "cubicin"],
+    "daratumumab": ["daratumumab", "darzalex"],
+    "darbepoetin": ["darbepoetin alfa", "aranesp"],
+        "darifenacin": ["darifenacin", "emselex"],
+    "darolutamide": ["darolutamide", "nubeqa"],
+    "darunavir": ["darunavir", "prezista", "rezolsta"],
+    "dasatinib": ["dasatinib", "sprycel"],
+    "dasabuvir": ["dasabuvir", "exviera"],
+    "daunorubicin": ["daunorubicin", "cerubidine"],
+    "deegans": ["deegans"],
+    "deep heat": ["deep heat"],
+    "deferasirox": ["deferasirox", "exjade"],
+    "deferiprone": ["deferiprone", "ferriprox"],
+    "degarelix": ["degarelix", "firmagon"],
+    "delstrigo": ["delstrigo", "doravirine/lamivudine/tenofovir"],
+    "demeclocycline": ["demeclocycline", "ledermycin"],
+    "denosumab": ["denosumab", "prolia", "xgeva"],
+    "dermol": ["dermol", "dermol cream"],
+    "descovy": ["descovy", "emtricitabine/tenofovir alafenamide"],
+    "desferrioxamine": ["desferrioxamine", "desferal"],
+    "desflurane": ["desflurane", "suprane"],
+    "desloratadine": ["desloratadine", "neoclarityn"],
+    "desmopressin": ["desmopressin", "ddavp", "desmomelt", "noqdirna", "octim"],
+    "desogestrel": ["desogestrel", "cerazette", "cerelle"],
+    "dexamethasone": ["dexamethasone", "maxidex", "ozurdex", "dexsol", "neofordex"],
+    "dexamfetamine": ["dexamfetamine", "dexamphetamine", "amfexa"],
+    "dexmedetomidine": ["dexmedetomidine", "dexdor"],
+    "dextrose": ["dextrose", "dextrosol"],
+    "diamorphine": ["diamorphine", "heroin", "diagesil"],
+    "diaminopyridine": ["diaminopyridine", "firdapse"],
+    "dianette": ["dianette", "co-cyprindiol", "cyproterone/ethinylestradiol"],
+    "diazepam": ["diazepam", "valium", "diazepam rectubes", "stesolid"],
+    "diazoxide": ["diazoxide", "eudemine", "proglycem"],
+    "dibrompropamidine": ["dibrompropamidine", "brolene"],
+    "diclofenac": ["diclofenac", "voltarol", "pennsaid", "solaraze", "voltaren"],
+    "dicobalt edetate": ["dicobalt edetate"],
+    "diconal": ["diconal"],
+    "dicycloverine": ["dicycloverine", "dicyclomine", "merbentyl"],
+    "didanosine": ["didanosine", "videx"],
+    "diethylamine salicylate": ["diethylamine salicylate"],
+    "diethylstilbestrol": ["diethylstilbestrol"],
+    "difelikefalin": ["difelikefalin", "kapruvia"],
+    "digoxin": ["digoxin", "lanoxin"],
+    "digoxin immune fab": ["digoxin immune fab", "digibind", "digifab"],
+    "dihydrocodeine": ["dihydrocodeine", "df118", "dhc continus"],
+    "diltiazem": ["diltiazem", "tildiem", "viazem", "zemtard", "adizem", "angitil", "dilzem"],
+    "dimethyl fumarate": ["dimethyl fumarate", "tecfidera", "skilarence"],
+    "dimeticone": ["dimeticone", "hedrin", "nyda"],
+    "dimercaprol": ["dimercaprol"],
+    "dinoprostone": ["dinoprostone", "prostin e2"],
+    "dioralyte": ["dioralyte"],
+    "diprosalic": ["diprosalic", "betamethasone/salicylic acid"],
+    "diprobase": ["diprobase"],
+    "dipyridamole": ["dipyridamole", "persantin", "attia"],
+    "diroximel fumarate": ["diroximel fumarate", "vumerity"],
+    "disodium edetate": ["disodium edetate"],
+    "disopyramide": ["disopyramide", "rythmodan"],
+    "disulfiram": ["disulfiram", "antabuse"],
+    "dithrocream": ["dithrocream"],
+    "dobutamine": ["dobutamine"],
+    "docetaxel": ["docetaxel", "taxotere"],
+    "docusate": ["docusate sodium", "dioctyl"],
+    "dolutegravir": ["dolutegravir", "tivicay"],
+    "dolutegravir/lamivudine": ["dolutegravir/lamivudine", "dovato"],
+    "dolutegravir/rilpivirine": ["dolutegravir/rilpivirine", "juluca"],
+    "domperidone": ["domperidone", "motilium"],
+    "donepezil": ["donepezil", "aricept"],
+    "dopamine": ["dopamine", "intropin"],
+    "dopexamine": ["dopexamine"],
+    "doravirine": ["doravirine", "pifeltro"],
+    "dornase alfa": ["dornase alfa", "pulmozyme"],
+    "dorzolamide": ["dorzolamide", "trusopt"],
+    "dorzolamide/timolol": ["dorzolamide/timolol", "cosopt", "cosopt preservative free"],
+    "dostarlimab": ["dostarlimab", "jemperli"],
+    "dosulepin": ["dosulepin", "dothiepin", "prothiaden"],
+    "doublebase": ["doublebase"],
+    "dovobet": ["dovobet", "calcipotriol/betamethasone", "enstilar"],
+    "doxapram": ["doxapram", "dopram"],
+    "doxazosin": ["doxazosin", "cardura", "doxadura"],
+    "doxepin": ["doxepin", "sinequan"],
+    "doxorubicin": ["doxorubicin", "doxorubicin pegylated liposomal", "caelyx", "myocet"],
+    "doxycycline": ["doxycycline", "vibramycin", "efracea", "periostat", "acticlate"],
+    "doxylamine/pyridoxine": ["doxylamine/pyridoxine", "Xonvea"],
+    "dronedarone": ["dronedarone", "multaq"],
+    "droxidopa": ["droxidopa"],
+    "vaccines": ["dtap/ipv/hib", "dtap/ipv/hib/hepb", "td/ipv", "dtap/ipv", "pediacel", "infanrix", "boostrix", "repevax"],
+    "duac": ["duac", "clindamycin/benzoyl peroxide"],
+    "duaklir": ["duaklir genuair", "aclidinium/formoterol"],
+    "dulaglutide": ["dulaglutide", "trulicity"],
+    "duloxetine": ["duloxetine", "cymbalta", "yentreve"],
+    "duocal": ["duocal"],
+    "duolube": ["duolube", "soothe"],
+    "duoresp": ["duoresp spiromax", "budesonide/formoterol"],
+    "durvalumab": ["durvalumab", "imfinzi"],
+    "dutasteride": ["dutasteride", "avodart"],
+    "dymista": ["dymista", "azelastine/fluticasone"],
+    "eculizumab": ["eculizumab", "soliris"],
+    "edoxaban": ["edoxaban", "lixiana"],
+    "efavirenz": ["efavirenz", "sustiva"],
+    "efavirenz/emtricitabine/tenofovir": ["efavirenz/emtricitabine/tenofovir", "atripla"],
+    "eflornithine": ["eflornithine", "vaniqa"],
+    "elemental": ["elemental 028", "elemental 028 extra"],
+    "elleste": ["elleste-duet", "elleste-duet conti"],
+    "elranatamab": ["elranatamab", "elrexfio"],
+    "eltrombopag": ["eltrombopag", "revolade"],
+    "eluxadoline": ["eluxadoline", "truberzi"],
+    "emla": ["emla", "lidocaine/prilocaine"],
+    "emollin": ["emollin"],
+    "empagliflozin": ["empagliflozin", "jardiance"],
+    "emtricitabine": ["emtricitabine", "emtriva"],
+    "emtricitabine/tenofovir": ["emtricitabine/tenofovir", "truvada", "descovy"],
+    "emulsifying ointment": ["emulsifying ointment"],
+    "enalapril": ["enalapril", "innovace"],
+    "enbucrilate": ["enbucrilate"],
+    "encorafenib": ["encorafenib", "braftovi"],
+    "enoxaparin": ["enoxaparin", "clexane", "inhixa"],
+    "entacapone": ["entacapone", "comtess"],
+    "entecavir": ["entecavir", "baraclude"],
+    "enzalutamide": ["enzalutamide", "xtandi"],
+    "epaderm": ["epaderm"],
+    "epclusa": ["epclusa", "sofosbuvir/velpatasvir"],
+    "epcoritamab": ["epcoritamab", "tepkinly"],
+    "ephedrine": ["ephedrine hydrochloride", "ephedrine"],
+    "epiduo": ["epiduo", "adapalene/benzoyl peroxide"],
+    "epimax": ["epimax"],
+    "epinephrine": ["epinephrine", "adrenaline"],
+       "epirubicin": ["epirubicin", "pharmorubicin"],
+    "eplerenone": ["eplerenone", "inspra"],
+    "forticreme": ["forticreme dessert feed"],
+    "fortisip": ["fortisip sip feed"],
+    "fortisip compact": ["fortisip compact"],
+    "fortisip compact fibre": ["fortisip compact fibre"],
+    "fortisip compact protein": ["fortisip compact protein"],
+    "fortisip extra": ["fortisip extra feed"],
+    "fortisip multifibre": ["fortisip multifibre feed"],
+    "fortisip plant based": ["fortisip plant based"],
+    "fortijuice": ["fortijuice sip feed"],
+    "fresubin": ["fresubin 2kcal"],
+    "infatrini": ["infatrini liquid", "infatrini peptisorb"],
+    "nepro": ["nepro hp"],
+    "nutricreme": ["nutricreme"],
+    "nutrini": ["nutrini", "nutrini energy", "nutrini multifibre", "nutrini energy multifibre", "nutrini low energy multifibre", "nutrini peptisorb"],
+    "nutrison": ["nutrison enteral feed", "nutrison concentrate", "nutrison energy", "nutrison low sodium", "nutrison multifibre", "nutrison peptisorb", "nutrison peptisorb advance", "nutrison peptisorb plus hehp", "nutrison soya", "nutrison protein plus"],
+    "osmolite": ["osmolite hp"],
+    "paediasure": ["paediasure peptide"],
+    "prosource": ["prosource jelly"],
+    "resource": ["resource energy", "resource fibre"],
+    "tentrini": ["tentrini", "tentrini energy", "tentrini energy multifibre"],
+    "vital": ["vital 1.5 kcal"],
+    "epoetin": ["epoetin alfa", "epoetin beta", "eprex", "neorecormon", "binocrit"],
+    "epoprostenol": ["epoprostenol", "flolan", "veletri"],
+    "eprosartan": ["eprosartan", "teveten"],
+    "erdosteine": ["erdosteine"],
+    "erenumab": ["erenumab", "aimovig"],
+    "ergocalciferol": ["ergocalciferol", "vitamin d2"],
+    "ergometrine": ["ergometrine"],
+    "eribulin": ["eribulin", "halaven"],
+    "erlotinib": ["erlotinib", "tarceva"],
+    "ertapenem": ["ertapenem", "invanz"],
+    "ertugliflozin": ["ertugliflozin", "steglatro"],
+    "erythromycin": ["erythromycin", "erymax", "erythrocin", "erythroped"],
+    "escherichia coli lysate": ["escherichia coli lysate", "uro-vaxom"],
+    "escitalopram": ["escitalopram", "cipralex"],
+    "eslicarbazepine": ["eslicarbazepine", "zebinix"],
+    "esmolol": ["esmolol", "brevibloc"],
+    "esomeprazole": ["esomeprazole", "nexium"],
+    "estradiol": ["estradiol", "estrace", "elleste solo", "progynova", "zumenon", "bedol", "climaval", "hormonin"],
+    "estriol": ["estriol", "ovestin"],
+    "etamsylate": ["etamsylate", "dicynene"],
+    "etanercept": ["etanercept", "enbrel", "benepali", "erelzi"],
+    "etelcalcetide": ["etelcalcetide", "parsabiv"],
+    "ethambutol": ["ethambutol"],
+    "ethacrynic acid": ["ethacrynic acid"],
+    "ethanol": ["ethanol"],
+    "ethinylestradiol": ["ethinylestradiol"],
+    "ethosuximide": ["ethosuximide", "zarontin"],
+    "ethyl chloride": ["ethyl chloride"],
+    "etodolac": ["etodolac", "lodine"],
+    "etonogestrel": ["etonogestrel", "nexplanon"],
+    "etoposide": ["etoposide", "vepesid", "etopophos"],
+    "etoricoxib": ["etoricoxib", "arcoxia"],
+    "etravirine": ["etravirine", "intelence"],
+    "eucreas": ["eucreas", "vildagliptin/metformin"],
+    "everolimus": ["everolimus", "afinitor", "certican", "votubia"],
+    "eviplera": ["eviplera", "rilpivirine/emtricitabine/tenofovir"],
+    "evolocumab": ["evolocumab", "repatha"],
+    "evorel": ["evorel"],
+    "evotaz": ["evotaz", "atazanavir/cobicistat"],
+    "evra": ["evra"],
+    "exemestane": ["exemestane", "aromasin"],
+    "exenatide": ["exenatide", "byetta", "bydureon"],
+    "extreneal": ["extreneal"],
+    "eylamdo": ["eylamdo"],
+    "ezetimibe": ["ezetimibe", "ezetrol"],
+        "famciclovir": ["famciclovir", "famvir"],
+    "famotidine": ["famotidine", "pepcid"],
+    "faricimab": ["faricimab", "vabysmo"],
+    "febuxostat": ["febuxostat", "adenuric"],
+    "fedratinib": ["fedratinib", "inrebic"],
+    "feiba": ["feiba"],
+    "felbinac": ["felbinac", "traxam"],
+    "felodipine": ["felodipine", "cardioplen", "felogen", "plendil", "vascalpha"],
+    "femoston": ["femoston"],
+    "femodene": ["femodene"],
+    "femulen": ["femulen", "etynodiol"],
+    "fenfluramine": ["fenfluramine", "fintepla"],
+    "fenofibrate": ["fenofibrate", "lipantil", "supralip"],
+    "fentanyl": ["fentanyl", "abstral", "effentora", "instanyl", "pecfent", "durogesic", "matrifen", "osmanil", "fencino", "victanyl"],
+    "ferrous": ["ferrous sulphate", "ferrous fumarate", "ferrous gluconate", "ferrograd", "feospan", "ferrograd c", "pregaday"],
+    "ferric": ["ferric carboxymaltose", "ferric maltol", "ferric subsulphate", "ferinject", "feraccru"],
+    "fesoterodine": ["fesoterodine", "toviaz"],
+    "fexofenadine": ["fexofenadine", "telfast"],
+    "fidaxomicin": ["fidaxomicin", "dificlir"],
+    "filgotinib": ["filgotinib", "jyseleca"],
+    "filgrastim": ["filgrastim", "neupogen", "accofil", "nivestim", "zarzio"],
+    "finasteride": ["finasteride", "proscar", "propecia"],
+    "finerenone": ["finerenone", "kerendia"],
+    "fingolimod": ["fingolimod", "gilenya"],
+    "flaminal": ["flaminal"],
+    "flavoxate": ["flavoxate"],
+    "flecainide": ["flecainide", "tambocor"],
+    "fleet": ["fleet phospho-soda"],
+    "flucytosine": ["flucytosine", "ancotil"],
+    "flucloxacillin": ["flucloxacillin", "fluclox", "floxapen"],
+    "fluconazole": ["fluconazole", "diflucan"],
+    "fludrocortisone": ["fludrocortisone", "florinef"],
+    "fludarabine": ["fludarabine", "fludara"],
+    "fludroxycortide": ["fludroxycortide", "haelan"],
+    "flumazenil": ["flumazenil", "anexate"],
+    "flunarizine": ["flunarizine", "sibelium"],
+    "fluocinolone": ["fluocinolone", "synalar", "iluvien"],
+    "fluorometholone": ["fluorometholone", "fml"],
+    "fluorescein": ["fluorescein sodium", "minims fluorescein sodium"],
+    "fluorouracil": ["fluorouracil", "5-fu", "efudix"],
+    "fluoxetine": ["fluoxetine", "prozac", "oxactin"],
+    "flupentixol": ["flupentixol", "depixol", "fluanxol"],
+    "fluphenazine": ["fluphenazine", "modecate"],
+    "flurbiprofen": ["flurbiprofen", "froben"],
+    "fluticasone": ["fluticasone", "flixotide", "flixonase", "avamys", "cutivate"],
+    "fluticasone/salmeterol": ["fluticasone/salmeterol", "seretide", "airflusol forspiro", "avenor", "combisal", "fixkoh", "fusacomb", "seffalair", "stalpex"],
+    "fluticasone/formoterol": ["fluticasone/formoterol", "flutiform"],
+    "flutamide": ["flutamide"],
+    "fluvastatin": ["fluvastatin", "lescol"],
+    "fluvoxamine": ["fluvoxamine", "faverin"],
+    "fmt": ["faecal microbiota transplant"],
+    "folic acid": ["folic acid"],
+    "folinic acid": ["folinic acid", "calcium folinate", "leucovorin", "refolinon", "isovorin"],
+    "follitropin": ["follitropin alfa", "follitropin beta", "puregon", "gonal-f", "bemfola"],
+    "fomepizole": ["fomepizole"],
+    "fondaparinux": ["fondaparinux", "arixtra"],
+        "forceval": ["forceval"],
+    "formoterol": ["formoterol", "foradil", "oxis", "atimos"],
+    "fosaprepitant": ["fosaprepitant", "ivemend"],
+    "fosamprenavir": ["fosamprenavir", "telzir"],
+    "fosavance": ["fosavance", "alendronic acid/colecalciferol"],
+    "foscarnet": ["foscarnet", "foscavir"],
+    "fosfomycin": ["fosfomycin", "monuril"],
+    "fosinopril": ["fosinopril"],
+    "foslevodopa/foscarbidopa": ["foslevodopa/foscarbidopa"],
+    "beclometasone/formoterol": ["beclometasone/formoterol", "fostair", "luforbec"],
+    "fostamatinib": ["fostamatinib", "tavlesse"],
+    "fremanezumab": ["fremanezumab", "ajovy"],
+    "fructose": ["fructose"],
+    "betamethasone/fusidic acid": ["betamethasone/fusidic acid", "fucibet"],
+    "hydrocortisone/fusidic acid": ["hydrocortisone/fusidic acid", "fucidin h"],
+    "fulvestrant": ["fulvestrant", "faslodex"],
+    "fumaric acid": ["fumaric acid"],
+    "furosemide": ["furosemide", "frusemide", "lasix", "frusol"],
+    "fusidic acid": ["fusidic acid", "fucidin", "fucithalmic"],
+    "gabapentin": ["gabapentin", "neurontin"],
+    "gadoxetate": ["gadoxetate disodium", "primovist"],
+    "gadobutrol": ["gadobutrol", "gadovist"],
+    "gadoteric acid": ["gadoteric acid", "dotarem"],
+    "galantamine": ["galantamine", "reminyl"],
+    "galcanezumab": ["galcanezumab", "emgality"],
+    "ganciclovir": ["ganciclovir", "cymevene"],
+    "bimatoprost/timolol": ["bimatoprost/timolol", "ganfort"],
+    "ganirelix": ["ganirelix", "orgalutran"],
+    "gastrografin": ["gastrografin"],
+    "gaviscon advance": ["gaviscon advance"],
+    "gaviscon infant": ["gaviscon infant"],
+    "gedarel": ["gedarel"],
+    "gefitinib": ["gefitinib", "iressa"],
+    "gelclair": ["gelclair"],
+    "gelofusine": ["gelofusine"],
+    "gemcitabine": ["gemcitabine", "gemzar"],
+    "gemeprost": ["gemeprost"],
+    "gemtuzumab": ["gemtuzumab ozogamicin", "mylotarg"],
+    "generic emollient": ["emollient cream", "emollient"],
+    "gentamicin": ["gentamicin", "genticin", "cidomycin"],
+    "gentamicin/hydrocortisone": ["gentamicin/hydrocortisone"],
+    "gentamicin/heparin": ["gentamicin/heparin"],
+    "elvitegravir/cobicistat/emtricitabine/tenofovir": ["elvitegravir/cobicistat/emtricitabine/tenofovir", "genvoya"],
+    "gilteritinib": ["gilteritinib", "xospata"],
+    "glacial acetic acid": ["glacial acetic acid"],
+    "glatiramer": ["glatiramer", "brabio", "copaxone", "remurel"],
+    "glibenclamide": ["glibenclamide", "daonil"],
+    "gliclazide": ["gliclazide", "diamicron", "nasulin"],
+    "glimepiride": ["glimepiride", "amaryl"],
+    "glipizide": ["glipizide", "minodiab"],
+    "glofitamab": ["glofitamab", "columvi"],
+    "glucarpidase": ["glucarpidase", "voraxaze"],
+    "glucose": ["glucose", "dextrose"],
+    "glucagon": ["glucagon", "ogluo", "glucagen", "glucagen hypokit"],
+    "glycopyrronium": ["glycopyrronium", "glycopyrronium bromide", "glycopyrrolate", "seebri", "Seebri Breezhaler", "sialanar"],
+    "glycopyrronium/neostigmine": ["glycopyrronium/neostigmine"],
+    "glycine": ["glycine"],
+    "glyceryl trinitrate": ["glyceryl trinitrate", "gtn", "nitrolingual", "minitran", "deponit", "nitro-dur", "transiderm-nitro", "glytrin", "rectogesic", "suscard"],
+    "glycerol": ["glycerol"],
+    "glycopyrronium/formoterol": ["glycopyrronium/formoterol", "bevespi aerosphere"],
+    "glycopyrronium/formoterol/budesonide": ["glycopyrronium/formoterol/budesonide", "trixeo aerosphere"],
+    "golimumab": ["golimumab", "simponi"],
+    "gonadorelin": ["gonadorelin"],
+    "goserelin": ["goserelin", "zoladex"],
+    "granisetron": ["granisetron", "kytril", "sancuso"],
+    "grass pollen extract": ["grass pollen extract", "grazax"],
+    "griseofulvin": ["griseofulvin"],
+    "guanfacine": ["guanfacine", "intuniv"],
+    "guselkumab": ["guselkumab", "tremfya"],
+    "haem arginate": ["haem arginate", "normosang"],
+    "haloperidol": ["haloperidol", "haldol", "serenace"],
+    "haloperidol decanoate": ["haloperidol decanoate", "haldol decanoate"],
+    "harvoni": ["harvoni", "ledipasvir/sofosbuvir"],
+    "hepatitis vaccines": [
+        "hepatitis a vaccine",
+        "hepatitis b vaccine",
+        "hepatitis a/b vaccine",
+        "havrix",
+        "avaxim",
+        "vaqta",
+        "engerix b",
+        "fendrix",
+        "hbvaxpro",
+        "twinrix",
+        "ambirix"
+    ],
+    "heparin": ["heparin", "heparin sodium", "minihep", "monoparin"],
+    "heparinoid": ["heparinoid", "hirudoid"],
+    "hexamidine": ["hexamidine"],
+    "hib/men c": ["hib/men c", "menitorix"],
+    "hyaluronidase": ["hyaluronidase", "hyalase"],
+    "hyaluronic acid": ["hyaluronic acid", "optive fusion", "vismed", "hyabak", "hylo-tear", "hylo-forte"],
+    "hydrocortisone": ["hydrocortisone", "efcortesol", "solu-cortef", "hydrocortone", "plenadren"],
+    "hydrocortisone acetate": ["hydrocortisone acetate", "colifoam"],
+    "hydrogen peroxide": ["hydrogen peroxide", "crystacide"],
+    "hydroxycarbamide": ["hydroxycarbamide", "siklos", "hydroxyurea", "hydrea"],
+    "hydroxychloroquine": ["hydroxychloroquine", "plaquenil"],
+    "hydromorphone": ["hydromorphone", "palladone"],
+    "hydralazine": ["hydralazine", "apresoline"],
+    "hydromol": ["hydromol"],
+    "hydroxyzine": ["hydroxyzine", "atarax", "ucerax"],
+    "hydroxocobalamin": ["hydroxocobalamin", "cobalin-h", "neo-cytamen"],
+    "hyoscine": ["hyoscine hydrobromide", "scopoderm", "scopolamine", "kwells"],
+    "hyoscine butylbromide": ["hyoscine butylbromide", "buscopan"],
+    "hypromellose": ["hypromellose", "isopto plain", "artelac", "lumecare", "hydroxypropylmethylcellulose", "hpmc", "artificial tears"],
+    "hypochlorous acid": ["hypochlorous acid"],
+    "ibandronic acid": ["ibandronic acid", "bondronat", "bonviva", "iasibon"],
+    "ibrutinib": ["ibrutinib", "imbruvica"],
+    "ibuprofen": ["ibuprofen", "brufen", "nurofen", "calprofen", "nurofen plus", "brufen retard", "fenbid", "ibucalm", "ibuleve", "ibumousse", "ibuspray", "rimafen"],
+    "icatibant": ["icatibant", "firazyr"],
+    "ichthammol": ["ichthammol"],
+    "icosapent ethyl": ["icosapent ethyl", "vazkepa"],
+    "idarubicin": ["idarubicin hydrochloride", "zavedos"],
+    "idarucizumab": ["idarucizumab", "praxbind"],
+    "idelalisib": ["idelalisib", "zydelig"],
+    "ifosfamide": ["ifosfamide"],
+    "iloprost": ["iloprost", "ventavis", "ilomedin"],
+    "imatinib": ["imatinib", "glivec", "gleevec"],
+    "imidapril": ["imidapril", "tanatril"],
+    "imipramine": ["imipramine", "tofranil"],
+    "imiquimod": ["imiquimod", "aldara", "zyclara"],
+    "immunoglobulin human": [
+        "gamunex",
+        "iqymune",
+        "tegeline", 
+        "privigen",
+        "octogam",
+        "subcuvia",
+        "hizentra",
+        "vigam",
+        "kiovig",
+        "subgam",
+        "cutaquig",
+        "gammanorm",
+        "cuvitru",
+        "flebogamma",
+        "gammaplex",
+        "octagam",
+        "panzyga"
+    ],
+    "immunoglobulin anti d": ["immunoglobulin anti d", "rhophylac", "d-gam"],
+    "immunoglobulin tetanus": ["immunoglobulin tetanus"],
+    "immunoglobulin varicella zoster": ["immunoglobulin varicella zoster"],
+    "immunoglobulin rabies": ["immunoglobulin human rabies", "rabies immunoglobulin"],
+    "inclisiran": ["inclisiran", "leqvio"],
+    "indapamide": ["indapamide", "natrilix", "tensaid"],
+    "indacaterol": ["indacaterol", "onbrez breezhaler", "oslif breezhaler"],
+    "indigo carmine": ["indigo carmine"],
+    "indian ink": ["indian ink"],
+    "indometacin": ["indometacin", "indomethacin"],
+    "indocyanine green": ["indocyanine green"],
+    "indoramin": ["indoramin", "doralese"],
+    "infliximab": ["infliximab", "remicade", "inflectra", "remsima", "zessly", "flixabi"],
+    "influenza vaccines": [
+        "influenza vaccine fluarix tetra",
+        "influenza egg free vaccine",
+        "influenza quadrivalent vaccine",
+        "influenza nasal spray",
+        "influenza trivalent vaccine",
+        "fluenz tetra",
+        "flucelvax tetra",
+        "fluad",
+        "quadrivalent influenza vaccine"
+    ],
+    "inotuzumab ozogamicin": ["inotuzumab ozogamicin", "besponsa"],
+    "insuman comb 15": ["insuman comb 15"],
+    "insuman comb 25": ["insuman comb 25"],
+    "insulin degludec": ["insulin degludec", "tresiba"],
+    "insulin aspart": ["insulin aspart", "novorapid", "fiasp"],
+    "insulin glargine": ["insulin glargine", "lantus", "toujeo", "semglee"],
+    "insulin abasaglar": ["insulin abasaglar", "abasaglar"],
+    "insulin Semglee": ["insulin semglee", "semglee"],
+    "insulin glulisine": ["insulin glulisine", "apidra"],
+    "insulin lispro": ["insulin lispro", "humalog"],
+    "insulin lispro sanofi": ["insulin lispro sanofi", "lispro sanfi"],
+    "insulin lispro mix 25": ["insulin lispro mix 25", "humalog mix 25"],
+    "insulin lispro mix 50": ["insulin lispro mix 50", "humalog mix 50"],
+    "insulin lispro lyumjev": ["insulin lispro lyumjev", "lyumjev"],
+    "insulin human soluble": ["insulin human soluble", "actrapid", "humulin s", "insuman rapid"],
+    "insulin human isophane": ["insulin human isophane", "humulin i", "insulatard", "insuman basal"],
+    "insulin human mix 30/70": ["insulin human mix 30/70", "humulin m3", "insuman comb 30"],
+    "insulin aspart mix 30": ["insulin aspart mix 30", "novomix 30"],
+    "insulin detemir": ["insulin detemir", "levemir"],
+    "insulin porcine isophane": ["insulin porcine isophane", "hypurin porcine isophane"],
+    "insulin porcine neutral": ["insulin porcine neutral", "hypurin porcine neutral"],
+    "insulin porcine mix 30/70": ["insulin porcine mix 30/70", "hypurin mix 30/70"],
+    "insulin aspart biosimilar": ["insulin aspart biosimilar", "trurapi"],
+    "lidocaine/chlorhexidine": ["lidocaine/chlorhexidine", "instillagel"],
+    "interferon": ["interferon", "intron a", "roferon-a"],
+    "interferon beta-1a": ["interferon beta-1a", "avonex", "rebif", "plegridy"],
+    "interferon beta-1b": ["interferon beta-1b", "betaferon", "extavia"],
+    "intralipid": ["intralipid"],
+    "intralipid/vitlipid": ["intralipid/vitlipid"],
+    "invertase": ["invertase"],
+    "iodine": ["iodine aqueous", "iodine weak", "iodine tincture", "videne"],
+    "iodoform": ["iodoform compound"],
+    "iohexol 140": ["iohexol 140", "omnipaque 140"],
+    "iohexol 240": ["iohexol 240", "omnipaque 240"],
+    "iohexol 300": ["iohexol 300", "omnipaque 300"],
+    "iohexol 350": ["iohexol 350", "omnipaque 350"],
+    "iopamidol 30.6%": ["iopamidol 30.6%", "niopam 150"],
+    "iopamidol 61.2%": ["iopamidol 61.2%", "niopam 300", "gastromiro"],
+    "iopamidol 69.4%": ["iopamidol 69.4%", "niopam 340"],
+    "iopamidol 75.5%": ["iopamidol 75.5%", "niopam 370"],
+    "ipilimumab": ["ipilimumab", "yervoy"],
+    "ipratropium": ["ipratropium", "atrovent", "respontin", "ipratropium steri-neb"],
+    "irbesartan": ["irbesartan", "aprovel"],
+    "irinotecan": ["irinotecan hydrochloride", "campto", "irinotecan accord", "irinotecan fresenius"],
+    "iron dextran": ["iron dextran", "cosmofer"],
+    "iron sucrose": ["iron sucrose", "venofer"],
+    "ferric derisomaltose": ["ferric derisomaltose", "monofer"],
+    "iron iii chloride": ["iron iii chloride"],
+    "isatuximab": ["isatuximab", "sarclisa"],
+    "isavuconazole": ["isavuconazole", "cresemba"],
+    "isoflurane": ["isoflurane"],
+    "isoniazid": ["isoniazid", "rimifon"],
+    "isoprenaline": ["isoprenaline", "isoprenaline hydrochloride", "isoprenaline sulphate", "isuprel"],
+    "isosorbide mononitrate": ["isosorbide mononitrate", "imdur", "ismo", "isotard", "modisal", "monomil", "elantan"],
+    "isosorbide dinitrate": ["isosorbide dinitrate", "isordil"],
+    "isotretinoin": ["isotretinoin", "roaccutane", "isotrex", "isotrexin"],
+    "ispaghula husk": ["ispaghula husk", "fybogel", "isogel"],
+    "itraconazole": ["itraconazole", "sporanox"],
+    "levonorgestrel iud": ["levonorgestrel iud", "jaydess", "kyleena", "levosert", "mirena"],
+    "copper iud": ["copper iud", "flexi-t", "neo-safe t", "t-safe", "novaplus t", "ancora", "cu-safe", "load 375", "multi-safe", "nova-t"],
+    "ivabradine": ["ivabradine", "procoralan"],
+    "ivermectin": ["ivermectin", "soolantra", "stromectol"],
+    "ivosidenib": ["ivosidenib", "tibsovo"],
+    "ixazomib": ["ixazomib", "ninlaro"],
+    "ixekizumab": ["ixekizumab", "taltz"],
+    "kabiven": ["kabiven peripheral"],
+    "lopinavir/ritonavir": ["lopinavir/ritonavir", "kaletra"],
+    "kaolin": ["kaolin mixture"],
+    "kaolin/morphine": ["kaolin/morphine"],
+    "triamcinolone/neomycin/nystatin/gramicidin": ["triamcinolone/neomycin/nystatin/gramicidin", "kenacomb"],
+    "ketamine": ["ketamine hydrochloride", "ketalar"],
+    "ketorolac": ["ketorolac", "acuvail", "acular"],
+    "ketotifen": ["ketotifen", "zaditen"],
+    "ketoprofen": ["ketoprofen", "oruvail", "powergel"],
+    "ketoconazole": ["ketoconazole", "nizoral"],
+    "ketovite": ["ketovite"],
+    "labetalol": ["labetalol", "trandate"],
+    "lacidipine": ["lacidipine"],
+    "lacosamide": ["lacosamide", "vimpat"],
+    "l-arginine": ["l-arginine"],
+    "l-serine": ["l-serine"],
+    "lacrilube": ["lacrilube"],
+    "lactulose": ["lactulose", "duphalac"],
+    "lactose": ["lactose"],
+    "lamivudine": ["lamivudine", "epivir", "zeffix"],
+    "lamotrigine": ["lamotrigine", "lamictal"],
+    "lanreotide": ["lanreotide", "somatuline"],
+    "lansoprazole": ["lansoprazole", "zoton"],
+    "lanthanum": ["lanthanum", "lanthanum carbonate", "fosrenol"],
+    "lapatinib": ["lapatinib", "tyverb"],
+    "larotrectinib": ["larotrectinib", "vitrakvi"],
+    "laronidase": ["laronidase", "aldurazyme"],
+    "lassars paste": ["lassars paste"],
+    "latanoprost": ["latanoprost", "xalatan", "monopost"],
+    "latanoprost/timolol": ["latanoprost/timolol", "xalacom"],
+    "lecicarbon": ["lecicarbon"],
+    "leflunomide": ["leflunomide", "arava"],
+    "lenalidomide": ["lenalidomide", "revlimid"],
+    "lenograstim": ["lenograstim", "granocyte"],
+    "lenvatinib": ["lenvatinib", "kisplyx", "lenvima"],
+    "lercanidipine": ["lercanidipine", "zanidip"],
+    "letrozole": ["letrozole", "femara"],
+    "leuprorelin": ["leuprorelin acetate", "prostap", "lutrate"],
+    "levamisole": ["levamisole"],
+    "levetiracetam": ["levetiracetam", "keppra", "desitrend"],
+    "levonorgestrel": ["levonorgestrel", "levest", "levonelle", "upostelle", "emerres", "norgeston"],
+    "levofloxacin": ["levofloxacin", "evoxil", "tavanic"],
+    "levobunolol": ["levobunolol", "betagan"],
+    "levothyroxine": ["levothyroxine", "levothyroid", "eltroxin"],
+    "levosimendan": ["levosimendan", "simdax"],
+    "levobupivacaine": ["levobupivacaine", "chirocaine"],
+    "levomepromazine": ["levomepromazine", "nozinan"],
+    "levobupivacaine/fentanyl": ["levobupivacaine/fentanyl"],
+    "lidocaine": ["lidocaine", "lignocaine", "xylocaine", "versatis"],
+    "lidocaine/adrenaline": ["lidocaine/adrenaline", "lignocaine/epinephrine", "xylocaine with adrenaline"],
+    "lidocaine/glucose": ["lidocaine/glucose"],
+    "lidocaine/phenylephrine": ["lidocaine/phenylephrine", "instillagel"],
+    "lidocaine/fluorescein": ["lidocaine/fluorescein", "minims lignocaine and fluorescein"],
+    "linaclotide": ["linaclotide", "constella"],
+    "linagliptin": ["linagliptin", "trajenta"],
+    "linezolid": ["linezolid", "zyvox"],
+    "liothyronine": ["liothyronine", "tertroxin", "thybon"],
+    "lipegfilgrastim": ["lipegfilgrastim", "lonquex"],
+    "lipiodol": ["lipiodol ultra fluid"],
+    "liquigen": ["liquigen"],
+    "liraglutide": ["liraglutide", "victoza", "saxenda"],
+    "lisdexamfetamine": ["lisdexamfetamine", "elvanse"],
+    "lisinopril": ["lisinopril", "zestril", "lisicostad"],
+    "lisinopril/hydrochlorothiazide": ["lisinopril/hydrochlorothiazide", "zestoretic"],
+    "lithium": ["lithium chloride", "lithium citrate", "lithium carbonate", "priadel", "camcolit", "liskonum", "lithonate"],
+    "lixisenatide": ["lixisenatide", "lyxumia"],
+    "locasol": ["locasol"],
+    "flumetasone/clioquinol": ["flumetasone/clioquinol", "locorten"],
+    "lodoxamide": ["lodoxamide", "alomide"],
+    "loestrin": ["loestrin"],
+    "lofepramine": ["lofepramine", "gamanil"],
+    "logynon": ["logynon"],
+    "lomustine": ["lomustine", "ccnu"],
+    "loncastuximab": ["loncastuximab tesirine", "zynlonta"],
+    "loperamide": ["loperamide", "imodium", "diareze"],
+    "loprazolam": ["loprazolam"],
+    "loratadine": ["loratadine", "clarityn"],
+    "lorazepam": ["lorazepam", "ativan"],
+    "lorenzos oil": ["lorenzos oil"],
+    "lorlatinib": ["lorlatinib", "lorviqua"],
+    "lormetazepam": ["lormetazepam"],
+    "l-ornithine/l-aspartate": ["l-ornithine/l-aspartate"],
+    "losartan": ["losartan", "cozaar"],
+    "losartan/hydrochlorothiazide": ["losartan/hydrochlorothiazide", "cozaar comp"],
+    "loteprednol": ["loteprednol", "lotemax"],
+       "clotrimazole/betamethasone": ["clotrimazole/betamethasone", "lotriderm"],
+    "lurasidone": ["lurasidone", "latuda"],
+    "lutrol": ["lutrol"],
+    "lymecycline": ["lymecycline", "tetralysal"],
+    "macitentan": ["macitentan", "opsumit"],
+    "macrogol": ["macrogol", "movicol", "laxido", "cosmocol", "molaxole", "macilax"],
+    "magnesium": ["magnesium aspartate", "magnesium glycerophosphate", "magnesium sulphate", "magnesium trisilicate", "magnaspartate", "magnesiocard", "magnophate"],
+    "malathion": ["malathion", "derbac", "prioderm", "suleo-m"],
+    "manevac": ["manevac"],
+    "mannitol": ["mannitol", "bronchitol", "osmohale"],
+    "maraviroc": ["maraviroc", "celsentri"],
+    "marvelon": ["marvelon"],
+    "mavacamten": ["mavacamten", "camzyos"],
+    "glecaprevir/pibrentasvir": ["glecaprevir/pibrentasvir", "maviret"],
+    "dexamethasone/neomycin/polymyxin": ["dexamethasone/neomycin/polymyxin", "maxitrol"],
+    "mebendazole": ["mebendazole", "vermox", "ovex"],
+    "mebeverine": ["mebeverine", "colofac", "aurobeverine"],
+    "medroxyprogesterone": ["medroxyprogesterone", "provera", "depo-provera", "sayana press"],
+    "mefenamic acid": ["mefenamic acid", "ponstan"],
+    "megestrol": ["megestrol", "megace"],
+    "melatonin": ["melatonin", "circadin", "slenyto"],
+    "meloxicam": ["meloxicam", "mobic"],
+    "melphalan": ["melphalan", "alkeran"],
+    "memantine": ["memantine", "ebixa", "nemdatine"],
+    "menadiol": ["menadiol diphosphate"],
+    "meningococcal vaccines": [
+        "meningococcal acwy conjugate",
+        "meningococcal b multicomponent",
+        "meningococcal c",
+        "menjugate",
+        "nimenrix",
+        "menveo",
+        "bexsero",
+        "trumenba"
+    ],
+    "menthol": ["menthol", "menthol/eucalyptus"],
+    "mepacrine": ["mepacrine"],
+    "mepivacaine": ["mepivacaine", "scandonest"],
+    "mepolizumab": ["mepolizumab", "nucala"],
+    "meptazinol": ["meptazinol", "meptid"],
+    "mercaptamine": ["mercaptamine", "cystagon", "procysbi"],
+    "mercaptopurine": ["mercaptopurine", "puri-nethol", "xaluprine"],
+    "mercilon": ["mercilon"],
+    "meropenem": ["meropenem", "meronem"],
+    "mesalazine": ["mesalazine", "pentasa", "asacol", "octasa", "salofalk", "mezavant"],
+    "mesna": ["mesna", "uromitexan"],
+    "metaraminol": ["metaraminol"],
+    "metanium": ["metanium"],
+    "metformin": ["metformin", "glucophage", "bolamyn", "diagemet", "glucient", "metabet"],
+    "metformin/alogliptin": [ "metformin/alogliptin", "Vipdomet"],
+    "methadone": ["methadone", "physeptone", "methadose"],
+    "methacholine": ["methacholine", "provocholine"],
+    "methenamine": ["methenamine hippurate", "hiprex"],
+    "methocarbamol": ["methocarbamol", "robaxin"],
+    "methylcellulose": ["methylcellulose"],
+    "methyldopa": ["methyldopa", "aldomet"],
+    "methoxyflurane": ["methoxyflurane", "penthrox"],
+    "methylprednisolone": ["methylprednisolone", "medrone", "solu-medrone", "depo-medrone"],
+    "methylprednisolone/lidocaine": ["methylprednisolone/lidocaine", "depo-medrone with lidocaine"],
+    "methotrexate": ["methotrexate", "maxtrex", "metoject", "nordimet", "zlatal"],
+    "methylphenidate": ["methylphenidate", "ritalin", "concerta", "equasym", "medikinet", "xaggitin"],
+    "methoxy polyethylene glycol-epoetin beta": ["methoxy polyethylene glycol-epoetin beta", "mircera"],
+    "metoclopramide": ["metoclopramide", "maxolon"],
+    "metolazone": ["metolazone", "xaqua", "zaroxolyn"],
+    "metoprolol": ["metoprolol", "betaloc", "lopresor"],
+    "metronidazole": ["metronidazole", "flagyl", "metrogel", "rozex", "acea", "anabact", "metrotop", "zyomet"],
+    "metyrapone": ["metyrapone", "metopirone"],
+    "mexiletine": ["mexiletine", "namuscla"],
+    "mianserin": ["mianserin", "tolvon"],
+    "miconazole": ["miconazole", "daktarin", "gyno-daktarin", "micatin"],
+    "micronor": ["micronor"],
+    "midazolam": ["midazolam", "epistatis", "buccolam", "hypnovel"],
+    "midazolam/lidocaine": ["midazolam/lidocaine"],
+    "midodrine": ["midodrine", "bramox"],
+    "midostaurin": ["midostaurin", "rydapt"],
+    "mifepristone": ["mifepristone", "mifegyne"],
+    "migraleve": ["migraleve pink", "migraleve duopack"],
+    "millinette": ["millinette"],
+    "milrinone": ["milrinone"],
+    "minocycline": ["minocycline", "minocin", "aknemin"],
+    "minoxidil": ["minoxidil", "loniten", "rogaine", "regaine"],
+    "mirabegron": ["mirabegron", "betmiga"],
+    "mirikizumab": ["mirikizumab", "omvoh"],
+    "mirtazapine": ["mirtazapine", "zispin"],
+    "misoprostol": ["misoprostol", "cytotec"],
+    "mitomycin": ["mitomycin", "mitomycin-c"],
+    "mitoxantrone": ["mitoxantrone", "onkotrone"],
+    "mitotane": ["mitotane", "lysodren"],
+    "medical gases": [
+        "air",
+        "argon",
+        "carbon dioxide",
+        "entonox",
+        "helium",
+        "heliox",
+        "nitrogen",
+        "nitrous oxide",
+        "oxygen",
+        "nitronox"
+    ],
+    "mivacurium": ["mivacurium", "mivacron"],
+    "mmr vaccine": ["mmr vaccine", "priorix", "mmrvaxpro"],
+    "mobocertinib": ["mobocertinib", "exkivity"],
+    "moclobemide": ["moclobemide", "manerix"],
+    "modafinil": ["modafinil", "provigil"],
+    "modulen": ["modulen ibd"],
+    "molnupiravir": ["molnupiravir", "lagevrio"],
+    "mometasone": ["mometasone", "elocon", "nasonex", "asmanex"],
+    "momelotinib": ["momelotinib"],
+    "monogen": ["monogen"],
+    "montelukast": ["montelukast", "singulair"],
+    "morphine": [
+        "morphine",
+        "morphine sulphate",
+        "morphine sulfate",
+        "mst",
+        "zomorph",
+        "morphgesic",
+        "mxl",
+        "actimorp",
+        "sevredol",
+        "oramorph",
+        "filnarine"
+    ],
+    "moxifloxacin": ["moxifloxacin", "avelox", "moxivig"],
+    "moxisylyte": ["moxisylyte", "opilon"],
+    "moxonidine": ["moxonidine", "physiotens"],
+    "mupirocin": ["mupirocin", "bactroban"],
+    "mycophenolate": ["mycophenolate", "myfortic", "cellcept", "mycophenolate mofetil"],
+    "mydricaine": ["mydricaine"],
+    "mydrane": ["mydrane"],
+    "nabilone": ["nabilone", "cesamet"],
+    "nabumetone": ["nabumetone", "relifex"],
+    "nadolol": ["nadolol", "corgard"],
+    "nafarelin": ["nafarelin", "synarel"],
+    "naftidrofuryl": ["naftidrofuryl", "praxilene"],
+    "naldemedine": ["naldemedine", "rizmoic"],
+    "naloxegol": ["naloxegol", "moventig"],
+    "naloxone": ["naloxone", "prenoxad", "nyxoid"],
+    "naltrexone": ["naltrexone", "nalcrom", "adepend"],
+    "naproxen": ["naproxen", "naprosyn", "stirlescent"],
+    "naratriptan": ["naratriptan", "naramig"],
+    "naseptin": ["naseptin", "chlorhexidine/neomycin"],
+    "natamycin": ["natamycin"],
+      "natalizumab": ["natalizumab", "tysabri", "tyruko"],
+    "nateglinide": ["nateglinide", "starlix"],
+    "nebivolol": ["nebivolol", "nebilet"],
+    "nefopam": ["nefopam", "acupan"],
+    "nelarabine": ["nelarabine", "atriance"],
+    "neocate": ["neocate advance", "neocate lcp"],
+    "neomycin": ["neomycin"],
+    "neostigmine": ["neostigmine", "prostigmin"],
+    "nepafenac": ["nepafenac", "nevanac"],
+    "neratinib": ["neratinib", "nerlynx"],
+    "nevirapine": ["nevirapine", "viramune"],
+    "nicardipine": ["nicardipine", "cardene"],
+    "nicotine": ["nicotine", "nicorette", "nicotinell", "niquitin", "nicopass", "nicopatch", "nicotrol"],
+    "nicorandil": ["nicorandil", "ikorel"],
+    "nifedipine": ["nifedipine", "adalat", "adipine", "fortipine", "nifedipress", "coracten"],
+    "nilotinib": ["nilotinib", "tasigna"],
+    "nimodipine": ["nimodipine", "nimotop"],
+    "nintedanib": ["nintedanib", "vargatef", "ofev"],
+    "niraparib": ["niraparib", "zejula"],
+    "nitrofurantoin": ["nitrofurantoin", "macrobid", "macrodantin"],
+    "nitrazepam": ["nitrazepam", "mogadon"],
+    "nivolumab": ["nivolumab", "opdivo"],
+    "nizatidine": ["nizatidine", "axid"],
+    "nonoxinol": ["nonoxinol-9", "gygel"],
+    "noradrenaline": ["noradrenaline", "norepinephrine"],
+    "norethisterone": ["norethisterone", "noriday", "primolut n", "utovlan", "noristerat"],
+    "norgeston": ["norgeston", "levonorgestrel", "Levonorgestrel (Norgeston)"],
+    "nortriptyline": ["nortriptyline", "allegron"],
+    "nuvaring": ["nuvaring"],
+    "nuvelle": ["nuvelle"],
+    "nystaform": ["nystaform"],
+    "nystatin": ["nystatin", "nystan"],
+    "nystatin/chlorhexidine/hydrocortisone": ["nystatin/chlorhexidine/hydrocortisone", "Nystatin/Chlorhex/Hydrocortisone", "nystaform HC"],
+    "obeticholic acid": ["obeticholic acid", "ocaliva"],
+    "obinutuzumab": ["obinutuzumab", "gazyvaro"],
+    "ocrelizumab": ["ocrelizumab", "ocrevus"],
+    "ocriplasmin": ["ocriplasmin", "jetrea"],
+    "octenidine": ["octenidine", "octenilin", "octenisan"],
+    "olanzapine": ["olanzapine", "Zyprexa"],
+    "Olmesartan": ["Olmesartan", "Olmesartan medoxomil"],
+    "Olmesartan/amlodipine": ["Olmesartan/amlodipine", "Sevikar"],
+    "Olmesartan/amlodipine/hydrochlorothiazide": ["Olmesartan/amlodipine/hydrochlorothiazide", "Sevikar HCT"],
+    "omeprazole": ["omeprazole", "Losec", "Mezzopram"],
+    "ondansetron": ["ondansetron", "Zofran"],
+    "otigo": ["otigo"],
+    "otinova": ["otinova"],
+    "otocomb": ["otocomb"],
+    "otomize": ["otomize"],
+    "otrivine-antistin": ["otrivine-antistin", "xylometazoline/antazoline"],
+    "oxaliplatin": ["oxaliplatin", "eloxatin"],
+    "oxazepam": ["oxazepam"],
+    "oxcarbazepine": ["oxcarbazepine", "trileptal"],
+    "oxerutins": ["oxerutins", "paroven"],
+    "pentoxifylline": ["pentoxifylline", "trental"],
+    "oxprenolol": ["oxprenolol", "trasicor"],
+    "oxybuprocaine": ["oxybuprocaine", "benoxinate"],
+    "oxybutynin": ["oxybutynin", "kentera", "lyrinel xl"],
+    "oxycodone": ["oxycodone", "oxynorm", "oxycontin", "shortec", "longtec", "reltebon"],
+    "oxycodone/naloxone": ["oxycodone/naloxone", "targinact"],
+    "oxygen": ["oxygen"],
+    "oxymetholone": ["oxymetholone", "anapolon"],
+    "oxytocin": ["oxytocin", "syntocinon"],
+    "oxytetracycline": ["oxytetracycline", "oxymycin"],
+    "ozanimod": ["ozanimod", "zeposia"],
+    "pabrinex": ["pabrinex"],
+    "paclitaxel": ["paclitaxel", "taxol", "abraxane"],
+    "palbociclib": ["palbociclib", "ibrance"],
+    "palivizumab": ["palivizumab", "synagis"],
+    "paliperidone": ["paliperidone", "invega", "xeplion", "trevicta"],
+    "palonosetron": ["palonosetron", "aloxi"],
+    "pancuronium": ["pancuronium"],
+    "panitumumab": ["panitumumab", "vectibix"],
+    "panobinostat": ["panobinostat", "farydak"],
+    "pantoprazole": ["pantoprazole", "protium"],
+    "papaverine": ["papaverine"],
+    "papaverine/phentolamine": ["papaverine/phentolamine"],
+    "hpv vaccine": ["papilloma vaccine", "gardasil", "cervarix"],
+    "paracetamol": ["paracetamol", "panadol", "calpol", "disprol", "perfalgan", "acetaminophen"],
+    "paraffin": ["paraffin", "yellow soft paraffin", "liquid paraffin"],
+    "paraldehyde": ["paraldehyde"],
+    "parecoxib": ["parecoxib", "dynastat"],
+    "paricalcitol": ["paricalcitol", "zemplar"],
+    "paroxetine": ["paroxetine", "seroxat"],
+    "paromomycin": ["paromomycin", "humatin"],
+    "pasireotide": ["pasireotide", "signifor"],
+    "patent blue": ["patent blue v"],
+    "patiromer": ["patiromer", "veltassa"],
+    "nirmatrelvir/ritonavir": ["nirmatrelvir/ritonavir", "paxlovid"],
+    "pazopanib": ["pazopanib", "votrient"],
+    "pegaspargase": ["pegaspargase", "oncaspar"],
+    "pegfilgrastim": ["pegfilgrastim", "neulasta", "pelgraz", "ziextenzo", "fulphila", "pelmeg", "nyvepria"],
+    "peginterferon alfa-2a": ["peginterferon alfa-2a", "pegasys"],
+    "peginterferon alfa-2b": ["peginterferon alfa-2b", "viraferonpeg"],
+    "peginterferon beta": ["peginterferon beta-1a", "plegridy"],
+    "pembrolizumab": ["pembrolizumab", "keytruda"],
+    "pemetrexed": ["pemetrexed", "alimta"],
+    "penicillin v": ["penicillin v", "phenoxymethylpenicillin"],
+    "penicillamine": ["penicillamine", "distamine"],
+    "pentosan": ["pentosan polysulphate", "elmiron"],
+    "pentostatin": ["pentostatin", "nipent"],
+    "pentamidine": ["pentamidine isethionate", "pentacarinat"],
+    "peppermint oil": ["peppermint oil", "colpermin", "mintec"],
+    "peptamen": [
+        "peptamen af",
+        "peptamen hn", 
+        "peptamen jnr",
+        "peptamen vanilla"
+    ],
+    "pepti-junior": ["pepti-junior"],
+    "peptisorb": [
+        "peptisorb",
+        "nutrison peptisorb plus hehp"
+    ],
+    "peptac": ["peptac"],
+    "perampanel": ["perampanel", "fycompa"],
+    "pergolide": ["pergolide", "celance"],
+    "pergoveris": ["follitropin/lutropin", "pergoveris"],
+    "pericyazine": ["pericyazine", "neulactil"],
+    "perindopril": ["perindopril", "coversyl"],
+    "perindopril/amlodipine": ["perindopril/amlodipine"],
+    "perindopril/indapamide": ["perindopril/indapamide"],
+    "permethrin": ["permethrin", "lyclear"],
+    "pertuzumab": ["pertuzumab", "perjeta"],
+    "pertuzumab/trastuzumab": ["pertuzumab/trastuzumab", "phesgo"],
+    "pethidine": ["pethidine", "meperidine"],
+    "phenobarbital": [
+        "phenobarbital",
+        "phenobarbital teva",
+        "phenobarbital accord",
+        "phenobarbital bristol",
+        "phenobarbital almus",
+        "phenobarbital actavis"
+    ],
+    "phenoxybenzamine": ["phenoxybenzamine", "dibenyline"],
+    "phenylephrine": ["phenylephrine", "phenylephrine hydrochloride"],
+    "phenytoin": [
+        "phenytoin sodium flynn",
+        "phenytoin sodium almus",
+        "phenytoin sodium teva",
+        "phenytoin sodium milpharm",
+        "phenytoin sodium nrim",
+        "phenytoin infatabs",
+        "epanutin"
+    ],
+    "phenol": ["phenol"],
+    "phenylbutazone": ["phenylbutazone"],
+    "phenelzine": ["phenelzine", "nardil"],
+    "phenindione": ["phenindione"],
+    "phentolamine": ["phentolamine", "rogitine"],
+    "phenylephrine/tropicamide": ["phenylephrine/tropicamide", "mydriasert"],
+      "phosphate": [
+        "potassium acid phosphate",
+        "phosphate enema",
+        "joulies phosphate",
+        "phosphate polyfusor",
+        "phosphate sandoz",
+        "fleet phosphate",
+        "fleet ready-to-use"
+    ],
+    "physostigmine": ["physostigmine salicylate", "antilirium"],
+    "physioneal": ["physioneal"],
+    "phytomenadione": ["phytomenadione", "konakion", "vitamin k1"],
+    "pilocarpine": ["pilocarpine", "salagen", "minims pilocarpine"],
+    "pimecrolimus": ["pimecrolimus", "elidel"],
+    "pimozide": ["pimozide", "orap"],
+    "pioglitazone": ["pioglitazone", "actos"],
+    "pipotiazine": ["pipotiazine", "piportil"],
+    "piracetam": ["piracetam", "nootropil"],
+    "pirfenidone": ["pirfenidone", "esbriet"],
+    "piroxicam": ["piroxicam", "feldene"],
+    "pivmecillinam": ["pivmecillinam", "selexid"],
+    "pixantrone": ["pixantrone", "pixuvri"],
+    "pizotifen": ["pizotifen", "sandomigran"],
+    "plerixafor": ["plerixafor", "mozobil"],
+    "plenvu": ["plenvu"],
+    "pneumococcal vaccine": ["ppv vaccine", "pcv vaccine", "prevenar", "pneumovax", "synflorix"],
+    "podophyllotoxin": ["podophyllotoxin", "warticon", "condyline"],
+    "polatuzumab-vedotin": ["polatuzumab-vedotin", "polivy"],
+    "polihexanide": ["polihexanide", "prontosan"],
+    "polyvinyl alcohol": ["polyvinyl alcohol", "liquifilm tears", "sno tears"],
+    "polycal": ["polycal"],
+    "pomalidomide": ["pomalidomide", "imnovid"],
+    "ponatinib": ["ponatinib", "iclusig"],
+    "ponesimod": ["ponesimod", "ponvory"],
+    "poractant": ["poractant alpha", "poractant", "curosurf"],
+    "posaconazole": ["posaconazole", "noxafil"],
+    "potassium/glucose/sodium chloride": ["potassium/glucose/sodium chloride"],
+    "potassium/glucose": ["potassium/glucose"],
+    "potassium/sodium chloride": ["potassium/sodium chloride"],
+    "potassium ascorbate": ["potassium ascorbate"],
+    "potassium chloride": ["potassium chloride", "kay-cee-l"],
+    "potassum chloride/potassium bicarbonate": ["potassum chloride/potassium bicarbonate", "potassum chloride/potassium bicarb", "sando-k"],
+    "potassium acetate": ["potassium acetate"],
+    "potassium phosphate": ["potassium phosphate"],
+    "potassium iodide": ["potassium iodide"],
+    "potassium citrate": ["potassium citrate", "effercitrate"],
+    "potassium acid phosphate": ["potassium acid phosphate"],
+    "potassium permanganate": ["potassium permanganate"],
+    "potassium canrenoate": ["potassium canrenoate"],
+    "povidone iodine": ["povidone iodine", "betadine", "videne"],
+    "povidone iodine/boric acid": ["povidone iodine/boric acid"],
+    "pramipexole": ["pramipexole", "mirapexin"],
+    "prasugrel": ["prasugrel", "efient"],
+    "pravastatin": ["pravastatin", "lipostat"],
+    "prazosin": ["prazosin", "hypovase"],
+    "praziquantel": ["praziquantel", "biltricide"],
+    "prednisolone": ["prednsiolone"],
+    "pregabalin": ["pregabalin", "lyrica", "alzain", "axalid", "lecaent", "rewisca"],
+    "pregestimil": ["pregestimil lipil"],
+    "premarin": ["premarin"],
+    "premique": ["premique"],
+    "prempak": ["prempak"],
+    "prilocaine": ["prilocaine"],
+    "prilocaine/felypressin": ["prilocaine/felypressin", "citanest with octapressin"],
+    "primidone": ["primidone", "mysoline"],
+        "imipenem/cilastatin": ["imipenem/cilastatin", "primaxin"],
+    "primaquine": ["primaquine"],
+    "pristinamycin": ["pristinamycin", "pyostacine"],
+    "propantheline": ["propantheline", "pro-banthine"],
+    "probenecid": ["probenecid"],
+    "probiotics": ["probiotics", "vsl#3", "symprove", "bio-kult", "optibac"],
+    "procainamide": ["procainamide"],
+    "procyclidine": ["procyclidine", "kemadrin", "arpicolin"],
+    "procarbazine": ["procarbazine"],
+    "pro-cal": ["pro-cal"],
+    "procaine": ["procaine"],
+    "procaine penicillin": ["procaine penicillin", "procaine penicillin g", "procaine benzylpenicillin"],
+    "Prochlorperazine": ["Prochlorperazine", "Buccastem", "Stemetil"],
+    "proctosedyl": ["proctosedyl"],
+    "proflavine": ["proflavine"],
+    "progesterone": ["progesterone", "utrogestan", "crinone", "lutigest", "cyclogest"],
+    "proguanil": ["proguanil", "paludrine"],
+    "promethazine": ["promethazine", "phenergan"],
+    "promazine": ["promazine"],
+    "prontoderm": ["prontoderm"],
+    "prontosan": ["prontosan"],
+    "propamidine": ["propamidine isetionate", "golden eye"],
+    "propofol": ["propofol", "diprivan", "propoven"],
+    "propranolol": ["propranolol", "inderal", "bedranol", "beta-prograne", "syprol"],
+    "propafenone": ["propafenone", "arythmol"],
+    "propiverine": ["propiverine", "detrunorm"],
+    "propylthiouracil": ["propylthiouracil"],
+    "proshield": ["proshield"],
+    "protirelin": ["protirelin"],
+    "protamine": ["protamine sulphate"],
+    "prothrombin": ["prothrombin complex", "beriplex", "octaplex"],
+    "protifar": ["protifar"],
+    "proxymetacaine": ["proxymetacaine", "proxymetacaine minims"],
+    "proxymetacaine/fluorescein": ["proxymetacaine/fluorescein"],
+    "prucalopride": ["prucalopride", "resolor"],
+    "pseudoephedrine": ["pseudoephedrine", "sudafed"],
+    "psoriderm": ["psoriderm"],
+    "pyrazinamide": ["pyrazinamide"],
+    "pyridoxine": ["pyridoxine", "vitamin b6"],
+    "pyrimethamine": ["pyrimethamine", "daraprim"],
+    "pyridostigmine": ["pyridostigmine", "mestinon"],
+    "quetiapine": ["quetiapine", "seroquel"],
+    "quinapril": ["quinapril", "accupro"],
+    "quinagolide": ["quinagolide", "norprolac"],
+    "quinine": ["quinine sulphate", "quinine dihydrochloride", "quinine bisulphate"],
+    "quizartinib": ["quizartinib", "vanflyta"],
+    "rabeprazole": ["rabeprazole", "pariet"],
+    "rabies vaccine": ["rabies vaccine", "rabipur", "rabies verorab"],
+    "raloxifene": ["raloxifene", "evista"],
+    "raltitrexed": ["raltitrexed", "tomudex"],
+    "raltegravir": ["raltegravir", "isentress"],
+    "ramipril": ["ramipril"],
+    "ranibizumab": ["ranibizumab", "lucentis", "ongavia"],
+    "ranolazine": ["ranolazine", "ranexa"],
+    "rasagiline": ["rasagiline", "azilect"],
+    "rasburicase": ["rasburicase", "fasturtec"],
+    "ravulizumab": ["ravulizumab", "ultomiris"],
+    "reboxetine": ["reboxetine", "edronax"],
+    "regorafenib": ["regorafenib", "stivarga"],
+    "relvar": ["relvar ellipta", "fluticasone furoate/vilanterol"],
+    "relugolix/estradiol/norethisterone": ["relugolix/estradiol/norethisterone", "ryeqo"],
+    "remdesivir": ["remdesivir", "veklury"],
+    "remifentanil": ["remifentanil", "ultiva"],
+    "renapro": ["renapro"],
+    "renastart": ["renastart"],
+    "renavit": ["renavit"],
+    "repaglinide": ["repaglinide", "prandin"],
+    "reslizumab": ["reslizumab", "cinqaero"],
+    "resonium": ["resonium", "resonium a", "calcium resonium", "sps", "sodium polystyrene sulfonate"],
+    "retigabine": ["retigabine", "trobalt"],
+    "rezolsta": ["rezolsta", "darunavir/cobicistat"],
+    "riamet": ["riamet", "artemether/lumefantrine"],
+    "ribavirin": ["ribavirin", "rebetol", "copegus"],
+    "riboflavin": ["riboflavin", "vitamin b2"],
+    "ribociclib": ["ribociclib", "kisqali"],
+    "rifampicin": ["rifampicin", "rifadin", "rimactane"],
+    "rifabutin": ["rifabutin", "mycobutin"],
+    "rifaximin": ["rifaximin", "targaxan", "xifaxanta"],
+    "rifater": ["rifater", "rifampicin/isoniazid/pyrazinamide"],
+    "isoniazid/rifampicin": ["isoniazid/rifampicin", "rifinah"],
+    "rigevidon": ["rigevidon"],
+    "rilpivirine": ["rilpivirine", "edurant"],
+    "riluzole": ["riluzole", "rilutek", "teglutik"],
+    "rimexolone": ["rimexolone", "vexol"],
+    "rimegepant": ["rimegepant", "vydura"],
+    "riociguat": ["riociguat", "adempas"],
+    "risankizumab": ["risankizumab", "skyrizi"],
+    "risedronate": ["risedronate sodium", "actonel"],
+    "risperidone": ["risperidone", "risperdal", "risperdal consta"],
+    "ritonavir": ["ritonavir", "norvir"],
+    "rituximab": ["rituximab", "mabthera", "truxima", "ruxience", "rixathon", "riximyo", "blitzima"],
+    "rivaroxaban": ["rivaroxaban", "xarelto"],
+    "rivastigmine": ["rivastigmine", "exelon"],
+    "rizatriptan": ["rizatriptan", "maxalt"],
+    "rocuronium": ["rocuronium bromide", "rocuronium", "esmeron"],
+    "roflumilast": ["roflumilast", "daxas"],
+    "romiplostim": ["romiplostim", "nplate"],
+    "romosozumab": ["romosozumab", "evenity"],
+    "ropeginterferon": ["ropeginterferon alfa-2b", "besremi"],
+    "ropivacaine": ["ropivacaine", "naropin"],
+    "ropinirole": ["ropinirole", "requip", "ralnea", "spiroco"],
+    "rosuvastatin": ["rosuvastatin", "crestor"],
+    "rotavirus": ["rotavirus", "rotarix", "rotateq"],
+    "rotigotine": ["rotigotine", "neupro"],
+    "roxadustat": ["roxadustat", "evrenzo"],
+    "rsv vaccine": ["rsv vaccine", "arexvy", "beyfortus"],
+    "rucaparib": ["rucaparib", "rubraca"],
+    "rufinamide": ["rufinamide", "inovelon"],
+    "ruxolitinib": ["ruxolitinib", "jakavi"],
+    "saccharin": ["saccharin"],
+    "sacituzumab": ["sacituzumab govitecan", "trodelvy"],
+    "sacubitril/valsartan": ["sacubitril/valsartan", "entresto"],
+    "safinamide": ["safinamide", "xadago"],
+    "salactol": ["salactol"],
+    "salbutamol": ["salbutamol", "salamol", "Ventolin", "albuterol"],
+    "salbutamol/ipratropium": ["salbutamol/ipratropium", "combivent"],
+    "salicylic acid": ["salicylic acid"],
+    "salmeterol": ["salmeterol", "serevent"],
+    "sandocal": ["sandocal", "calvive", "sandocal", "Sandocal/Calvive"],
+    "sarilumab": ["sarilumab", "kevzara"],
+    "sativex": ["sativex", "nabiximols"],
+    "saxagliptin": ["saxagliptin", "onglyza"],
+    "scandishake": ["scandishake"],
+    "scheriproct": ["scheriproct"],
+    "secukinumab": ["secukinumab", "cosentyx"],
+    "selegiline": ["selegiline", "eldepryl", "zelapar"],
+    "selexipag": ["selexipag", "uptravi"],
+    "selenium": ["selenium", "selenase"],
+    "selinexor": ["selinexor", "nexpovio"],
+    "selpercatinib": ["selpercatinib", "retsevmo"],
+    "semaglutide": ["semaglutide", "ozempic", "rybelsus", "wegovy"],
+    "semisodium valproate": ["semisodium valproate", "depakote", "valproic acid", "convulex", "syonell", "belvo"],
+    "senna": ["senna", "senokot", "manevac", "calcium sennosides"],
+    "sertraline": ["sertraline", "lustral"],
+    "sevelamer": ["sevelamer", "renagel", "renvela"],
+    "sevoflurane": ["sevoflurane"],
+    "short chain fatty acid": ["short chain fatty acid"],
+    "sildenafil": ["sildenafil", "viagra", "revatio", "granpidam", "nipatra"],
+    "silver nitrate": ["silver nitrate"],
+    "silver sulfadiazine": ["silver sulfadiazine", "flamazine"],
+    "simbrinza": ["simbrinza", "brinzolamide/brimonidine"],
+    "simeticone": ["simeticone", "infacol"],
+    "simeprevir": ["simeprevir", "olysio"],
+    "simple eye": ["simple eye ointment"],
+    "simple linctus": ["simple linctus", "simple paediatric linctus"],
+    "simvastatin": ["simvastatin", "zocor", "simvador"],
+    "siopel": ["siopel"],
+    "siponimod": ["siponimod", "mayzent"],
+    "sirdupla": ["sirdupla"],
+    "sirolimus": ["sirolimus", "rapamune"],
+    "sitagliptin": ["sitagliptin", "januvia"],
+    "sitagliptin/metformin": ["sitagliptin/metfromin", "janumet"],
+    "sma": ["sma high energy", "sma powder lactose free"],
+    "smallpox vaccine": ["smallpox vaccine", "smallpox/monkeypox vaccine", "imvanex", "jynneos"],
+    "smofkabiven": ["smofkabiven", "smofkabiven ef", "smofkabiven en", "smofkabiven lo"],
+    "smoflipid": ["smoflipid"],
+    "sodium aurothiomalate": ["sodium aurothiomalate", "myocrisin"],
+    "sodium acetate": ["sodium acetate"],
+    "sodium bicarbonate": ["sodium bicarbonate"],
+    "sodium benzoate": ["sodium benzoate"],
+    "sodium chloride": ["sodium chloride", "saline"],
+    "Sodium cromoglicate": ["Sodium cromoglicate", "cromoglicate"],
+    "sodium citrate": ["sodium citrate"],
+    "sodium valproate": ["Sodium Valp. (Epilim)", "Epilim", "Sodium Valp. (Episenta)", "Episenta", "Sodium valp.", "Dyzantil", "Epival", "Depakin"],
+    "somatropin": ["somatropin", "genotropin", "norditropin", "zomacton", "humatrope", "saizen", "omnitrope", "nutropin"],
+    "somatrogon": ["somatrogon", "ngenla"],
+    "sorafenib": ["sorafenib", "nexavar"],
+    "sos": ["s.o.s"],
+    "sotalol": ["sotalol", "beta-cardone", "sotacor"],
+    "sotorasib": ["sotorasib", "lumykras"],
+    "sotrovimab": ["sotrovimab", "xevudy"],
+    "spectinomycin": ["spectinomycin"],
+    "spiolto": ["spiolto", "tiotropium/olodaterol"],
+    "spironolactone": ["spironolactone", "aldactone"],
+    "sprilon": ["sprilon"],
+    "stalevo": ["stalevo", "levodopa/carbidopa/entacapone"],
+    "stanek": ["stanek"],
+    "stanozolol": ["stanozolol"],
+    "stiripentol": ["stiripentol", "diacomit"],
+        "streptomycin": ["streptomycin"],
+    "streptokinase": ["streptokinase", "streptase"],
+    "stribild": ["stribild", "elvitegravir/cobicistat/emtricitabine/tenofovir"],
+    "strontium": ["strontium", "protelos", "aresto"],
+    "suboxone": ["suboxone", "buprenorphine/naloxone"],
+    "sucralfate": ["sucralfate", "antepsin"],
+    "sucrose": ["sucrose"],
+    "sucroferric oxyhydroxide": ["sucroferric oxyhydroxide", "velphoro"],
+    "sudocrem": ["sudocrem"],
+    "sugammadex": ["sugammadex", "bridion"],
+    "sulfinpyrazone": ["sulfinpyrazone"],
+    "sulfasalazine": ["sulfasalazine", "salazopyrin"],
+    "sulpiride": ["sulpiride", "dolmatil", "sulpor"],
+    "sulfadiazine": ["sulfadiazine"],
+    "sulphur hexafluoride": ["sulphur hexafluoride", "sonovue"],
+    "sulphamethoxypyridazine": ["sulphamethoxypyridazine"],
+    "sultiame": ["sultiame", "ospolot"],
+    "sumatriptan": ["sumatriptan", "imigran"],
+    "sunitinib": ["sunitinib", "sutent"],
+    "suxamethonium": ["suxamethonium chloride", "suxamethonium", "anectine"],
+    "symbicort": ["symbicort", "budesonide/formoterol"],
+    "symtuza": ["symtuza", "darunavir/cobicistat/emtricitabine/tenofovir"],
+    "syntometrine": ["syntometrine", "ergometrine/oxytocin"],
+    "syreniring": ["syreniring"],
+    "tacrolimus": ["tacrolimus", "prograf", "adoport", "advagraf", "envarsus", "modigraf"],
+    "tadalafil": ["tadalafil", "cialis", "adcirca"],
+    "tafluprost": ["tafluprost", "saflutan"],
+    "talazoparib": ["talazoparib", "talzenna"],
+    "talc": ["sterile talc"],
+    "tamoxifen": ["tamoxifen", "nolvadex"],
+    "tamsulosin": ["tamsulosin", "flomax", "pinexel", "tamfrex"],
+    "tamsulosin/solifenacin": ["tamsulosin/solifenacin", "vesomni"],
+    "tapentadol": ["tapentadol", "palexia"],
+    "taurolidine": ["taurolidine", "taurolock"],
+    "tazarotene": ["tazarotene", "zorac"],
+    "piperacillin/tazobactam": ["piperacillin/tazobactam", "tazocin"],
+    "teclistamab": ["teclistamab", "tecvayli"],
+    "teduglutide": ["teduglutide", "revestive"],
+    "teicoplanin": ["teicoplanin", "targocid"],
+    "telaprevir": ["telaprevir", "incivo"],
+    "telmisartan": ["telmisartan", "micardis"],
+    "telmisartan/hydrochlorothiazide": ["telmisartan/hydrochlorothiazide", "micardis plus"],
+    "temazepam": ["temazepam", "normison"],
+    "temozolomide": ["temozolomide", "temodal"],
+    "temocillin": ["temocillin", "negaban"],
+    "temsirolimus": ["temsirolimus", "torisel"],
+    "tenecteplase": ["tenecteplase", "metalyse"],
+    "tenofovir": ["tenofovir alafenamide", "tenofovir disoproxil", "viread"],
+    "tepotinib": ["tepotinib", "tepmetko"],
+    "terazosin": ["terazosin", "hytrin"],
+    "terbinafine": ["terbinafine", "lamisil"],
+    "terbutaline": ["terbutaline", "bricanyl"],
+    "teriflunomide": ["teriflunomide", "aubagio"],
+    "teriparatide": ["teriparatide", "terrosa", "forsteo", "movymia", "osmunda"],
+    "terlipressin": ["terlipressin", "glypressin", "variquel"],
+    "testosterone": ["testosterone", "testosterone esters", "testosterone undecanoate", "testosterone enanthate", "testosterone propionate", "testogel", "tostran", "restandol", "sustanon", "nebido"],
+    "tetracaine": ["tetracaine", "ametop", "minims tetracaine hydrochloride"],
+    "tetracycline": ["tetracycline"],
+    "tetracosactide": ["tetracosactide"],
+    "tetrabenazine": ["tetrabenazine", "xenazine", "revocon"],
+    "tezepelumab": ["tezepelumab", "tezspire"],
+       "thalidomide": ["thalidomide"],
+    "trometamol": ["trometamol", "tris"],
+    "theophylline": ["theophylline", "nuelin", "uniphyllin", "slo-phyllin"],
+    "thiamine": ["thiamine", "vitamin b1", "benerva"],
+    "thiotepa": ["thiotepa", "tepadina"],
+    "thiopental": ["thiopental sodium", "thiopentone"],
+    "tioguanine": ["tioguanine", "lanvis"],
+    "tiagabine": ["tiagabine", "gabitril"],
+    "tibolone": ["tibolone", "livial"],
+    "ticagrelor": ["ticagrelor", "brilique"],
+    "tigecycline": ["tigecycline", "tygacil"],
+    "timodine": ["timodine"],
+    "timolol": ["timolol", "timolol maleate", "timoptol", "betim"],
+    "timolol/bendroflumethiazide": ["timolol/bendroflumethiazide"],
+    "tinzaparin": ["tinzaparin", "innohep"],
+    "tioconazole": ["tioconazole", "trosyl"],
+    "tiopronin": ["tiopronin"],
+    "tiotropium": ["tiotropium", "spiriva", "braltus", "acopair"],
+    "tiratricol": ["tiratricol", "emcitate"],
+    "tirbanibulin": ["tirbanibulin", "klisyri"],
+    "tirofiban": ["tirofiban", "aggrastat"],
+    "tirzepatide": ["tirzepatide", "mounjaro"],
+    "tisseel": ["tisseel"],
+    "tivozanib": ["tivozanib", "fotivda"],
+    "tizanidine": ["tizanidine", "zanaflex"],
+    "tobramycin": ["tobramycin", "tobi", "bramitob", "tymbrineb", "vantobra"],
+    "tocilizumab": ["tocilizumab", "roactemra", "tyenne"],
+    "tocopherol": ["alpha tocopherol acetate", "vitamin e"],
+    "tocofersolan": ["tocofersolan"],
+    "tofacitinib": ["tofacitinib", "xeljanz"],
+    "tolbutamide": ["tolbutamide"],
+    "tolcapone": ["tolcapone", "tasmar"],
+    "tolterodine": ["tolterodine", "detrusitol"],
+    "tolvaptan": ["tolvaptan", "samsca", "jinarc"],
+    "topiramate": ["topiramate", "topamax"],
+    "topotecan": ["topotecan", "hycamtin"],
+    "trametinib": ["trametinib", "mekinist"],
+    "tramadol": ["tramadol", "zydol", "zamadol", "marol", "maxitram", "tramquel"],
+    "tramadol/paracetamol": ["tramadol/paracetamol", "tramacet"],
+    "tranexamic acid": ["tranexamic acid", "cyclokapron", "cyklokapron"],
+    "tranylcypromine": ["tranylcypromine", "parnate"],
+    "trandolapril": ["trandolapril", "gopten"],
+    "transvasin": ["transvasin"],
+    "trastuzumab": ["trastuzumab", "herceptin", "herzuma", "ontruzant", "kadcyla", "enhertu", "ogivri", "trazimera"],
+    "travoprost": ["travoprost", "travatan"],
+    "travoprost/timolol": ["travoprost/timolol", "duotrav"],
+    "trazodone": ["trazodone", "molipaxin"],
+    "trelegy": ["trelegy ellipta", "fluticasone/umeclidinium/vilanterol"],
+    "tretinoin": ["tretinoin", "retin-a", "airol"],
+    "triamcinolone": ["triamcinolone", "adcortyl", "kenalog", "triesence", "nasacort"],
+    "trichloracetic acid": ["trichloracetic acid"],
+    "trientine": ["trientine dihydrochloride", "cufence", "cuprior"],
+    "trifluorothymidine": ["trifluorothymidine"],
+    "trifluoperazine": ["trifluoperazine", "stelazine"],
+    "trifluridine/tipiracil": ["trifluridine-tipiracil", "lonsurf"],
+    "trihexyphenidyl": ["trihexyphenidyl", "benzhexol"],
+    "trimethoprim": ["trimethoprim", "monotrim"],
+    "trimipramine": ["trimipramine", "surmontil"],
+        "trimbow": ["trimbow", "beclometasone/formoterol/glycopyrronium"],
+    "trimovate": ["trimovate", "clobetasone/oxytetracycline/nystatin"],
+    "triomel": ["triomel"],
+    "triptorelin": ["triptorelin", "decapeptyl", "gonapeptyl", "salvacyl"],
+    "trisequens": ["trisequens"],
+    "triumeq": ["triumeq", "dolutegravir/abacavir/lamivudine"],
+    "tropicamide": ["tropicamide", "mydriacyl", "minims tropicamide"],
+    "trospium": ["trospium", "regurin", "flotros"],
+    "truvada": ["truvada", "emtricitabine/tenofovir"],
+    "tryptophan": ["tryptophan", "optimax"],
+    "tucatinib": ["tucatinib", "tukysa"],
+    "typhoid vaccine": ["typhoid vaccine", "vivotif", "typherix", "typhim vi"],
+    "tyrozets": ["tyrozets"],
+    "ubiquinone": ["ubiquinone coenzyme q10", "coq10"],
+    "ulipristal": ["ulipristal acetate", "ellaone", "esmya"],
+    "ultibro": ["ultibro", "indacaterol/glycopyrronium"],
+    "umeclidinium": ["umeclidinium", "incruse ellipta"],
+    "upadacitinib": ["upadacitinib", "rinvoq"],
+    "urea": ["urea", "hydromol forte"],
+    "uridine": ["uridine triacetate", "xuriden"],
+    "urographin": ["urographin"],
+    "urokinase": ["urokinase", "syner-kinase"],
+    "ursodeoxycholic acid": ["ursodeoxycholic acid", "ursofalk", "urso", "cholurso"],
+    "ustekinumab": ["ustekinumab", "stelara", "pyzchiva", "wezenla"],
+    "uvistat": ["uvistat"],
+    "valaciclovir": ["valaciclovir", "valtrex"],
+    "valganciclovir": ["valganciclovir", "valcyte"],
+    "valsartan": ["valsartan", "diovan"],
+    "valsartan/hydrochlorothiazide": ["valsartan/hydrochlorothiazide", "co-diovan"],
+    "vamin": ["vamin", "vaminolact"],
+    "vancomycin": ["vancomycin", "vancocin", "vancomycin flynn"],
+    "vancomycin/heparin": ["vancomycin/heparin"],
+    "vardenafil": ["vardenafil", "levitra"],
+    "varenicline": ["varenicline", "champix"],
+    "varicella-zoster vaccine": ["varicella-zoster vaccine", "varilrix", "varivax", "shingrix", "zostavax"],
+    "vasopressin": ["vasopressin", "empressin"],
+    "vecuronium": ["vecuronium bromide", "norcuron"],
+    "vedolizumab": ["vedolizumab", "entyvio"],
+    "vemurafenib": ["vemurafenib", "zelboraf"],
+    "venlafaxine": ["venlafaxine", "efexor", "alventa", "venaxx"],
+    "venetoclax": ["venetoclax", "venclyxto"],
+    "verapamil": ["verapamil", "securon", "vertab", "cordilox", "univer"],
+    "viatim": ["viatim"],
+    "viekirax": ["viekirax", "ombitasvir/paritaprevir/ritonavir"],
+    "vigabatrin": ["vigabatrin", "sabril"],
+    "vildagliptin": ["vildagliptin", "galvus"],
+    "vinblastine": ["vinblastine sulphate"],
+    "vincristine": ["vincristine sulphate", "oncovin"],
+    "vindesine": ["vindesine"],
+    "vinflunine": ["vinflunine", "javlor"],
+    "vinorelbine": ["vinorelbine", "navelbine"],
+    "viper antiserum": ["viper venom antiserum", "viperfav"],
+    "viscoat": ["viscoat"],
+    "vitamin a": ["vitamin a", "retinol", "retinol palmitate","vitamin a palmitate"],
+    "vitamin b compound": ["vitamin b compound strong", "vigranon b"],
+    "vitamins a and d": ["vitamins a and d", "abidec"],
+    "vitlipid": ["vitlipid"],
+        "voclosporin": ["voclosporin", "lupkynis"],
+    "volplex": ["volplex"],
+    "volumatic": ["volumatic spacer device", "volumatic with paediatric mask"],
+    "von willebrand factor": ["von willebrand factor", "wilfactin", "wilstart"],
+    "voractiv": ["voractiv"],
+    "voriconazole": ["voriconazole", "vfend"],
+    "vortioxetine": ["vortioxetine", "brintellix"],
+    "vosevi": ["vosevi", "sofosbuvir/velpatasvir/voxilaprevir"],
+    "vsl#3": ["vsl#3"],
+    "warfarin": ["warfarin sodium", "warfarin", "marevan"],
+    "water for injection": ["water for injection"],
+    "water for irrigation": ["sterile water for irrigation", "wilaqua sterile water"],
+    "water for inhalation": ["water for inhalation"],
+    "wysoy": ["wysoy formula"],
+    "xalacom": ["xalacom", "latanoprost/timolol"],
+    "xipamide": ["xipamide", "diurexan"],
+    "xylometazoline": ["xylometazoline hcl", "Otrivine Adult", "Otrivine Child", "galpseud", "Otrivine Allergy Relief", "Otrivine Congestion Relief"],
+    "yasmin": ["yasmin", "lucette"],
+    "yes": ["yes vm gel", "yes wb lubricant gel"],
+    "zafirlukast": ["zafirlukast", "accolate"],
+    "zanamivir": ["zanamivir", "relenza"],
+    "zanubrutinib": ["zanubrutinib", "brukinsa"],
+    "zepatier": ["zepatier", "elbasvir/grazoprevir"],
+    "zerobase": ["zerobase"],
+    "zerodouble": ["zerodouble"],
+    "zidovudine": ["zidovudine", "retrovir", "azt"],
+    "zidovudine/lamivudine": ["zidovudine/lamivudine", "combivir"],
+    "zinc": ["zinc sulphate", "zinc acetate", "zincomed", "solvazinc"],
+    "zineryt": ["zineryt", "erythromycin/zinc"],
+    "zoledronic acid": ["zoledronic acid", "zometa", "aclasta"],
+    "zolmitriptan": ["zolmitriptan", "zomig"],
+    "zolpidem": ["zolpidem", "stilnoct"],
+    "zonisamide": ["zonisamide", "zonegran"],
+    "zopiclone": ["zopiclone", "zimovane"],
+    "zuclopenthixol": ["zuclopenthixol", "zuclopenthixol decanoate", "clopixol"]
+        }
+      };
+    // Add after the medicationDict definition
+
+    function findMedicationMatch(inputName) {
+    // Normalize input: lowercase, remove extra spaces and standardize separators
+    const normalizedInput = inputName.toLowerCase()
+        .replace(/\s+with\s+/g, ' ')
+        .replace(/\s+and\s+/g, ' ')
+        .replace(/\s*[\/,+&]\s*/g, ' ')
+        .trim();
+    
+    console.log('Normalized input:', normalizedInput);
+    
+    // Helper function to check if a term is a complete word in the input
+    function isCompleteWord(term, input) {
+        const pattern = new RegExp(`\\b${term}\\b`, 'i');
+        return pattern.test(input);
+    }
+    
+    let bestMatch = null;
+    let bestMatchLength = 0;  // Track the length of the best matching term
+    let bestMatchScore = 0;   // Track how much of the input is matched
+
+    // Search through the medication dictionary
+    for (const [standardName, aliases] of Object.entries(medicationDict.medications)) {
+        // Get all possible forms of the medication name
+        const allForms = [standardName.toLowerCase(), ...aliases.map(a => a.toLowerCase())];
+        
+        for (const form of allForms) {
+            // For combination drugs (containing /)
+            if (form.includes('/')) {
+                const components = form.split('/').map(c => c.trim());
+                // Check if ALL components are found as complete words in the input
+                const allComponentsFound = components.every(comp => 
+                    isCompleteWord(comp, normalizedInput)
+                );
+                
+                if (allComponentsFound) {
+                    // Calculate total length of matching components
+                    const matchLength = components.reduce((sum, comp) => sum + comp.length, 0);
+                    if (matchLength > bestMatchLength) {
+                        bestMatch = standardName;
+                        bestMatchLength = matchLength;
+                        bestMatchScore = matchLength;
+                        console.log(`Found combination match: ${standardName} (length: ${matchLength})`);
+                    }
+                }
+            } 
+            // For single drugs (including multi-word drugs)
+            else {
+                // Check if the entire form appears as complete word(s) in the input
+                if (isCompleteWord(form, normalizedInput)) {
+                    // Calculate how much of the input this match covers
+                    const matchLength = form.length;
+                    if (matchLength > bestMatchLength) {
+                        bestMatch = standardName;
+                        bestMatchLength = matchLength;
+                        bestMatchScore = matchLength;
+                        console.log(`Found single drug match: ${standardName} (length: ${matchLength})`);
+                    }
+                }
+            }
+        }
+    }
+
+    console.log(`Matching "${inputName}" to "${bestMatch}" (match length: ${bestMatchLength})`);
+    return bestMatch;
+}
+function compareMedicationLists() {
+    // Get tables
+    const table1 = document.querySelector('#table1Container .data-table');
+    const table2 = document.querySelector('#table2Container .data-table');
+    
+    if (!table1 || !table2) {
+        alert('Please process both medication lists first');
+        return;
+    }
+
+    // Get medications from both tables
+    const getMedicationsFromTable = (table) => {
+        const meds = [];
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 2) {
+                const medName = cells[1].textContent.trim(); // Skip checkbox cell
+                const instructions = cells[2]?.textContent.trim() || '';
+                const comments = cells[3]?.textContent.trim() || '';
+                
+                // Find standardized name from dictionary
+                const standardizedName = findMedicationMatch(medName);
+                
+                meds.push({
+                    original: medName,
+                    standardized: standardizedName,
+                    instructions,
+                    comments
+                });
+                
+                console.log(`Processed: ${medName} -> ${standardizedName}`); // Debug logging
+            }
+        });
+        return meds;
+    };
+
+    const list1Meds = getMedicationsFromTable(table1);
+    const list2Meds = getMedicationsFromTable(table2);
+
+    // Compare lists
+    const matches = [];
+    const onlyInList1 = [];
+    const onlyInList2 = [];
+
+    // Find matches and items only in list 1
+    list1Meds.forEach(med1 => {
+        const match = list2Meds.find(med2 => 
+            med1.standardized && 
+            med2.standardized && 
+            med2.standardized === med1.standardized
+        );
+        
+        if (match) {
+            matches.push({ list1: med1, list2: match });
+        } else {
+            onlyInList1.push(med1);
+        }
+    });
+
+    // Find items only in list 2
+    list2Meds.forEach(med2 => {
+        if (!list1Meds.find(med1 => 
+            med1.standardized && 
+            med2.standardized && 
+            med1.standardized === med2.standardized
+        )) {
+            onlyInList2.push(med2);
+        }
+    });
+
+    // Display results
+    displayComparisonResults(matches, onlyInList1, onlyInList2);
+}
+
+function displayComparisonResults(matches, onlyInList1, onlyInList2) {
+    let resultsContainer = document.getElementById('comparisonResults');
+    if (!resultsContainer) {
+        resultsContainer = document.createElement('div');
+        resultsContainer.id = 'comparisonResults';
+        document.body.appendChild(resultsContainer);
+    }
+
+    // Group matching medications by their standardized name
+    const groupedMatches = matches.reduce((groups, match) => {
+        const standardName = match.list1.standardized || 'Unknown';
+        if (!groups[standardName]) {
+            groups[standardName] = [];
+        }
+        groups[standardName].push(match);
+        return groups;
+    }, {});
+
+    // Group medications that only appear in list 1
+    const groupedList1 = onlyInList1.reduce((groups, med) => {
+        const standardName = med.standardized || 'Unknown';
+        if (!groups[standardName]) {
+            groups[standardName] = [];
+        }
+        groups[standardName].push(med);
+        return groups;
+    }, {});
+
+    // Group medications that only appear in list 2
+    const groupedList2 = onlyInList2.reduce((groups, med) => {
+        const standardName = med.standardized || 'Unknown';
+        if (!groups[standardName]) {
+            groups[standardName] = [];
+        }
+        groups[standardName].push(med);
+        return groups;
+    }, {});
+
+    let html = `
+        <h2>Medication Comparison Results</h2>
+        
+        <h3>Matching Medications (${matches.length} entries)</h3>
+        <table class="data-table comparison-table">
+            <thead>
+                <tr>
+                    <th>Standard Name</th>
+                    <th>List 1 Details</th>
+                    <th>List 2 Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${Object.entries(groupedMatches).map(([standardName, matches]) => `
+                    <tr class="medication-group">
+                        <td rowspan="${matches.length}">${standardName}</td>
+                        <td>${formatMedicationDetails(matches[0].list1)}</td>
+                        <td>${formatMedicationDetails(matches[0].list2)}</td>
+                    </tr>
+                    ${matches.slice(1).map(match => `
+                        <tr class="medication-subrow">
+                            <td>${formatMedicationDetails(match.list1)}</td>
+                            <td>${formatMedicationDetails(match.list2)}</td>
+                        </tr>
+                    `).join('')}
+                `).join('')}
+            </tbody>
+        </table>
+
+        <h3>Only in List 1 (${onlyInList1.length} entries)</h3>
+        <table class="data-table comparison-table">
+            <thead>
+                <tr>
+                    <th>Standard Name</th>
+                    <th>Medication Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${Object.entries(groupedList1).map(([standardName, meds]) => `
+                    <tr class="medication-group">
+                        <td rowspan="${meds.length}">${standardName}</td>
+                        <td>${formatMedicationDetails(meds[0])}</td>
+                    </tr>
+                    ${meds.slice(1).map(med => `
+                        <tr class="medication-subrow">
+                            <td>${formatMedicationDetails(med)}</td>
+                        </tr>
+                    `).join('')}
+                `).join('')}
+            </tbody>
+        </table>
+
+        <h3>Only in List 2 (${onlyInList2.length} entries)</h3>
+        <table class="data-table comparison-table">
+            <thead>
+                <tr>
+                    <th>Standard Name</th>
+                    <th>Medication Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${Object.entries(groupedList2).map(([standardName, meds]) => `
+                    <tr class="medication-group">
+                        <td rowspan="${meds.length}">${standardName}</td>
+                        <td>${formatMedicationDetails(meds[0])}</td>
+                    </tr>
+                    ${meds.slice(1).map(med => `
+                        <tr class="medication-subrow">
+                            <td>${formatMedicationDetails(med)}</td>
+                        </tr>
+                    `).join('')}
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    resultsContainer.innerHTML = html;
+}
+
+function formatMedicationDetails(med) {
+    return `
+        <div class="medication-detail">
+            <div class="original-name">${med.original}</div>
+            <div class="instructions">${med.instructions}</div>
+            ${med.comments ? `<div class="comments">${med.comments}</div>` : ''}
+        </div>
+    `;
+}
+
+        function processInputData(data) {     
+    console.log('Starting processInputData');
+    
+    // Check GNCR format first since it's most specific
+    if (isGNCRFormat(data)) {
+        console.log('Processing as GNCR format');
+        return formatGNCRData(data);
+    }
+    // Then check other formats
+    else if (isCurrentMedsFormat(data)) {         
+        console.log('Processing as Current Meds format');
+        return formatCurrentMedsData(data);     
+    } 
+    else if (isHMTFormat(data)) {         
+        console.log('Processing as HMT format');
+        return formatHMTData(data);     
+    } 
+    else if (isDischargeMedicationFormat(data)) {         
+        console.log('Processing as Discharge Medication format');
+        return formatDischargeMedicationData(data);     
+    }
+    else if (isRecentTTOFormat(data)) {
+    console.log('Processing as recentTTO format');
+    return formatRecentTTOData(data);
+}
+else if (isMSXLFormat(data)) {
+    console.log('Processing as MSXL format');
+    return formatMSXLData(data);
+}
+    console.log('No matching format found');
+    return 'Medication\tInstructions'; 
+
+}
+function isCurrentMedsFormat(data) {
+    // Get first few lines and look for "Current Medications"
+    const firstLines = data.split('\n', 5); // Check first 5 lines
+    return firstLines.some(line => line.trim() === 'Current Medications') &&
+           firstLines.some((line, index) => 
+               line.trim() === 'Current Medications' && 
+               firstLines[index + 1]?.trim() === '');
+}
+
+function formatCurrentMedsData(data) {
+    const lines = data.split('\n');
+    let processedRows = [];
+    let currentMedication = '';
+    let currentInstructions = '';
+    let currentComments = [];
+    
+    // Add header row
+    processedRows.push(['Medication', 'Instructions', 'Comments'].join('\t'));
+    
+    function hasCompleteBrackets(text) {
+        let bracketCount = 0;
+        for (let char of text) {
+            if (char === '(') bracketCount++;
+            if (char === ')') bracketCount--;
+        }
+        return bracketCount === 0 && text.includes('(') && text.includes(')');
+    }
+    
+    // Find the "Current Medications" line
+    let startIndex = lines.findIndex(line => line.trim() === 'Current Medications');
+    if (startIndex === -1) return processedRows.join('\n');
+    
+    // Start processing from two lines after "Current Medications"
+    let i = startIndex + 2;
+    
+    console.log('Starting processing from line:', i);
+    
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+        
+        console.log(`\nProcessing line ${i}: "${line}"`);
+        
+        // Only process non-empty lines
+        if (trimmedLine) {
+            // Check if this is a new medication line by looking for complete brackets
+            const isNewMedication = hasCompleteBrackets(trimmedLine);
+            
+            if (isNewMedication) {
+                // Save previous entry if exists
+                if (currentMedication) {
+                    console.log('New medication line - saving previous entry:', {
+                        medication: currentMedication,
+                        instructions: currentInstructions,
+                        comments: [...currentComments]
+                    });
+                    processedRows.push([
+                        currentMedication,
+                        currentInstructions,
+                        currentComments.length ? currentComments.join(', ') : ''
+                    ].join('\t'));
+                }
+                
+                // Process new medication line
+                let lastClosingBracketIndex = -1;
+                let bracketCount = 0;
+                for (let j = 0; j < trimmedLine.length; j++) {
+                    if (trimmedLine[j] === '(') bracketCount++;
+                    if (trimmedLine[j] === ')') {
+                        bracketCount--;
+                        if (bracketCount === 0) {
+                            lastClosingBracketIndex = j;
+                        }
+                    }
+                }
+                
+                currentMedication = trimmedLine.substring(0, lastClosingBracketIndex + 1).trim();
+                currentInstructions = trimmedLine.substring(lastClosingBracketIndex + 1).trim();
+                currentComments = []; // Reset comments for new medication
+                
+                console.log('Started new medication entry:', {
+                    medication: currentMedication,
+                    instructions: currentInstructions
+                });
+            } else {
+                // This is a comment line
+                if (currentMedication) {
+                    console.log('Adding comment:', trimmedLine);
+                    currentComments.push(trimmedLine);
+                    console.log('Current comments:', [...currentComments]);
+                }
+            }
+        }
+        i++;
+    }
+    
+    // Add final entry if exists
+    if (currentMedication) {
+        console.log('Saving final entry:', {
+            medication: currentMedication,
+            instructions: currentInstructions,
+            comments: [...currentComments]
+        });
+        processedRows.push([
+            currentMedication,
+            currentInstructions,
+            currentComments.length ? currentComments.join(', ') : ''
+        ].join('\t'));
+    }
+    
+    return processedRows.join('\n');
+}
+function isHMTFormat(data) {
+    const rows = data.split('\n');
+    for (let row of rows) {
+        const columns = row.split('\t');  // Don't trim here
+        if (columns[0] === ' Medication') {  // Check for exact match including leading space
+            return true;
+        }
+    }
+    return false;
+}
+function formatHMTData(data) {
+    const rows = data.split('\n');
+    let processedRows = [];
+    let currentMedication = null;
+    let currentInstructions = null;
+    let currentComments = null;
+    let headerColumns = [];
+    let headerFound = false;
+    
+    // Define which columns should go to comments
+    const commentColumns = ['Active', 'Recorded', 'Status'];
+    
+    // Add our standard header
+    processedRows.push(['Medication', 'Instructions', 'Comments'].join('\t'));
+    
+    // First find the header row and get all column headers
+    let headerRowIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+        const columns = rows[i].split('\t');
+        if (columns[0] === ' Medication') {
+            headerFound = true;
+            headerRowIndex = i;
+            headerColumns = columns.map(h => h.trim());
+            console.log('Found headers:', headerColumns);
+            break;
+        }
+    }
+    
+    if (!headerFound) {
+        console.warn('Not valid HMT format - " Medication" column not found');
+        return null;
+    }
+
+    function isNewMedicationLine(columns) {
+    if (!columns[0]) return false;
+    
+    // If there's an instruction in column 1, it's a new medication line
+    if (columns[1]) {
+        const instructionPattern = /^(\d|See Taper|See Protocol)/;
+        return instructionPattern.test(columns[1].trim());
+    }
+    
+    // If the line starts with an opening bracket and doesn't have an instruction,
+    // it's likely a continuation of the previous medication name
+    if (columns[0].trim().startsWith('[')) return false;
+    
+    // If the line contains a closing bracket without an opening bracket,
+    // it's likely a continuation of the previous medication name
+    if (columns[0].trim().includes(']') && !columns[0].trim().includes('[')) return false;
+    
+    // Otherwise, if it's a non-empty first column, treat it as a new medication
+    return true;
+}
+
+// Process each row
+for (let i = headerRowIndex + 1; i < rows.length; i++) {
+    let columns = rows[i].split('\t').map(col => col.trim());
+    
+    // Skip empty rows
+    if (columns.every(col => !col)) continue;
+
+    if (isNewMedicationLine(columns)) {
+        // Save previous entry if exists
+        if (currentMedication) {
+            processedRows.push([
+                currentMedication,
+                currentInstructions || '',
+                currentComments || ''
+            ].join('\t'));
+        }
+        
+        // Start new entry
+        currentMedication = columns[0];
+        currentInstructions = columns[1];
+        let instructionExtras = [];
+        let commentParts = [];
+        
+        // Handle additional columns
+        for (let j = 2; j < columns.length; j++) {
+            if (columns[j] && headerColumns[j]) {
+                const header = headerColumns[j];
+                const value = columns[j];
+                
+                if (commentColumns.includes(header)) {
+                    commentParts.push(`${header}: ${value}`);
+                } else {
+                    instructionExtras.push(`<strong>${header}: ${value}</strong>`);
+                }
+            }
+        }
+        
+        // Add extras to instructions if any exist
+        if (instructionExtras.length > 0) {
+            currentInstructions += '; ' + instructionExtras.join('; ');
+        }
+        
+        // Set comments
+        currentComments = commentParts.join(', ');
+        
+    } else {
+        // This is a continuation line
+        if (columns[0]) {
+            currentMedication = currentMedication ? 
+                currentMedication + ' ' + columns[0] : columns[0];
+        }
+        if (columns[1]) {
+            currentInstructions = currentInstructions ? 
+                currentInstructions + ' ' + columns[1] : columns[1];
+        }
+    }
+}
+    // Add final entry if exists
+    if (currentMedication) {
+        processedRows.push([
+            currentMedication,
+            currentInstructions || '',
+            currentComments || ''
+        ].join('\t'));
+    }
+    
+    return processedRows.join('\n');
+}
+function isDischargeMedicationFormat(data) {
+    try {
+        const rows = data.split('\n').filter(row => row.trim());
+        // Make discharge format check more specific
+        return rows.some(row => 
+            (row.includes('[') && row.includes(']')) &&
+            !(row.toLowerCase().includes('medication item')) // Exclude GNCR format
+        );
+    } catch (error) {
+        console.error('Error in isDischargeMedicationFormat:', error);
+        return false;
+    }
+}
+
+    // Add the new format processing function here
+    function formatDischargeMedicationData(data) {
+    let processedRows = [];
+    processedRows.push(['Medication', 'Instructions'].join('\t'));
+    
+    // Split into blocks of text separated by blank lines
+    const medications = data.split(/\n\s*\n/).filter(med => med.trim());
+    
+    medications.forEach(medBlock => {
+        // Split block into lines
+        const lines = medBlock.split('\n');
+        let medicationLine = '';
+        let instructionsLines = [];
+        
+        // Process each line in the block
+        lines.forEach(line => {
+            if (!line.startsWith('      ')) { // If not indented with 6 spaces
+                if (!medicationLine) {
+                    medicationLine = line;
+                } else {
+                    instructionsLines.push(line);
+                }
+            }
+        });
+        
+        if (medicationLine) {
+            let medicationName, instructions;
+            
+            if (medicationLine.includes('[')) {
+                const parts = medicationLine.split(/\],\s*/);
+                if (parts.length >= 2) {
+                    medicationName = parts[0] + ']';
+                    instructions = [parts[1].trim(), ...instructionsLines].filter(Boolean).join(' ');
+                }
+            } else {
+                const parts = medicationLine.split(',');
+                if (parts.length >= 2) {
+                    medicationName = parts[0];
+                    instructions = [parts.slice(1).join(',').trim(), ...instructionsLines].filter(Boolean).join(' ');
+                }
+            }
+            
+            if (medicationName && instructions) {
+                processedRows.push([medicationName, instructions].join('\t'));
+            }
+        }
+    });
+    
+    return processedRows.join('\n');
+}
+
+function isGNCRFormat(data) {
+    try {
+        if (!data || typeof data !== 'string') {
+            console.log('GNCR Format Check: Invalid data type or empty');
+            return false;
+        }
+        
+        const rows = data.split('\n').filter(row => row.trim());
+        if (rows.length === 0) {
+            console.log('GNCR Format Check: No rows after filtering');
+            return false;
+        }
+
+        const headerRow = rows[0].trim();
+        const headers = headerRow.split('\t').map(h => h.trim().toLowerCase());
+        
+        // Check for required core headers
+        const requiredHeaders = [
+            'medication item',
+            'dosage instruction',
+            'quantity',
+            'issue date'
+        ];
+        
+        // Check if all required headers are present
+        const hasRequiredHeaders = requiredHeaders.every(header => headers.includes(header));
+        
+        console.log('GNCR Format Check:', {
+            headerRow: headerRow,
+            headers: headers,
+            requiredHeaders: requiredHeaders,
+            hasRequiredHeaders: hasRequiredHeaders
+        });
+        
+        return hasRequiredHeaders;
+        
+    } catch (error) {
+        console.error('GNCR Format check error:', error);
+        return false;
+    }
+}
+
+function formatGNCRData(data) {
+    try {
+        const rows = data.split('\n').filter(row => row.trim());
+        console.log('Initial row count:', rows.length);
+        
+        let processedRows = [];
+        processedRows.push(['Medication', 'Instructions', 'Comments'].join('\t'));
+        
+        // Get header indices for required columns
+        const headers = rows[0].split('\t').map(h => h.trim().toLowerCase());
+        const medicationIdx = headers.indexOf('medication item');
+        const instructionIdx = headers.indexOf('dosage instruction');
+        const quantityIdx = headers.indexOf('quantity');
+        const issueDateIdx = headers.indexOf('issue date');
+        
+        console.log('Column indices:', {
+            medicationIdx,
+            instructionIdx,
+            quantityIdx,
+            issueDateIdx
+        });
+        
+        // Get all additional column indices (any column that isn't one of the main ones)
+        const mainIndices = [medicationIdx, instructionIdx, quantityIdx, issueDateIdx];
+        const additionalColumnIndices = [];
+        for (let i = 0; i < headers.length; i++) {
+            if (!mainIndices.includes(i)) {
+                additionalColumnIndices.push(i);
+            }
+        }
+        
+        console.log('Additional column indices:', additionalColumnIndices);
+        
+        // List of rows to exclude
+        const excludeTerms = [
+            'acute medication',
+            'repeat medication',
+            'no recent acute medications',
+            'no recent repeat medications'
+        ];
+        
+        // Process each row starting after header
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const columns = row.split('\t');
+            
+            // Skip if medication column matches any exclude terms
+            if (columns[medicationIdx] && 
+                excludeTerms.includes(columns[medicationIdx].trim().toLowerCase())) {
+                console.log('Skipping excluded row:', columns[medicationIdx]);
+                continue;
+            }
+            
+            // Process row if it has a medication
+            if (columns[medicationIdx] && columns[medicationIdx].trim()) {
+                // Collect additional column information with headers
+                const additionalInfo = additionalColumnIndices
+                    .map(idx => {
+                        if (columns[idx] && columns[idx].trim()) {
+                            return `<strong>${headers[idx]}: ${columns[idx].trim()}</strong>`;
+                        }
+                        return null;
+                    })
+                    .filter(Boolean)
+                    .join('; ');
+                
+                // Create instructions string
+                let instructions = columns[instructionIdx] ? columns[instructionIdx].trim() : '';
+                if (additionalInfo) {
+                    instructions += instructions ? `; ${additionalInfo}` : additionalInfo;
+                }
+                
+                // Create comments string
+                const comments = [
+                    `Issue Date: ${columns[issueDateIdx] ? columns[issueDateIdx].trim() : 'N/A'}`,
+                    `Quantity: ${columns[quantityIdx] ? columns[quantityIdx].trim() : 'N/A'}`
+                ].join(', ');
+                
+                processedRows.push([
+                    columns[medicationIdx].trim(),
+                    instructions,
+                    comments
+                ].join('\t'));
+            }
+        }
+        
+        console.log('Final processed row count:', processedRows.length);
+        return processedRows.join('\n');
+        
+    } catch (error) {
+        console.error('Error formatting GNCR data:', error);
+        return 'Medication\tInstructions\tComments';
+    }
+}
+function formatGNCRRow(data) {
+    try {
+        console.log('Formatting row data:', data);
+        
+        // Combine instructions and comments with semicolon and bold comments
+        let instructions = data.instructions;
+        if (data.comments) {
+            instructions = `${instructions}; <strong>${data.comments}</strong>`;
+        }
+        
+        // Build metadata comments
+        let comments = [];
+        if (data.quantity) {
+            comments.push(`Quantity: ${data.quantity}`);
+        }
+        if (data.issueDate) {
+            comments.push(`Issue Date: ${data.issueDate}`);
+        }
+        
+        const formattedRow = [
+            data.medication,
+            instructions.trim(),
+            comments.join(', ')
+        ].join('\t');
+        
+        console.log('Formatted row output:', formattedRow);
+        return formattedRow;
+        
+    } catch (error) {
+        console.error('Error formatting row:', error);
+        return `${data.medication || ''}\t${data.instructions || ''}\t`;
+    }
+}
+function isRecentTTOFormat(data) {
+    console.log('Checking if RecentTTO format...');
+    const lines = data.split('\n');
+    console.log('First line:', lines[0]);
+    const headerLine = lines[0].trim();
+    const isRecentTTO = headerLine.includes('Medication') && headerLine.includes('Dosage Information');
+    console.log('Is RecentTTO format:', isRecentTTO);
+    return isRecentTTO;
+}
+
+function formatRecentTTOData(data) {
+    console.log('Formatting RecentTTO data...');
+    const rows = data.split('\n');
+    let processedRows = [];
+    processedRows.push(['Medication', 'Instructions', 'Comments'].join('\t'));
+    
+    // Header row remains unchanged
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i].trim();
+        if (!row) continue;
+        
+        // Split by tab character
+        const columns = row.split('\t');
+        if (columns.length < 2) continue;
+        
+        const medication = columns[0].trim();
+        let instructions = columns[1].trim();
+        let comments = columns[2] ? columns[2].trim() : '';
+        
+        // Special handling for double-spaced instructions
+        if (instructions.includes('  ')) {
+            const parts = instructions.split(/\s{2,}/);
+            instructions = parts.join(' ');
+        }
+        
+        processedRows.push([medication, instructions, comments].join('\t'));
+    }
+    
+    return processedRows.join('\n');
+}
+function isMSXLFormat(data) {
+    console.log('Checking if MSXL format...');
+    // Get the first non-empty line
+    const lines = data.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return false;
+    
+    const firstLine = lines[0].trim();
+    console.log('First non-empty line:', firstLine);
+    
+    const isMSXL = firstLine.includes('Last Issue') && 
+                   firstLine.includes('Drug / Dosage / Quantity');
+    console.log('Is MSXL format:', isMSXL);
+    return isMSXL;
+}
+function formatMSXLData(data) {
+    console.log('Formatting MSXL data...');
+    const rows = data.split('\n').filter(row => row.trim());
+    let processedRows = [];
+    processedRows.push(['Medication', 'Instructions', 'Comments'].join('\t'));
+    
+    // Parse headers more carefully
+    const headerRow = rows[0];
+    const headerColumns = headerRow.split(/\t|\s{2,}/).filter(h => h.trim());
+    console.log('Header columns:', headerColumns);
+    
+    // Helper function to split by commas while respecting parentheses
+    function splitRespectingParentheses(str) {
+        let parts = [];
+        let currentPart = '';
+        let parenthesesCount = 0;
+        
+        for (let i = 0; i < str.length; i++) {
+            if (str[i] === '(') parenthesesCount++;
+            if (str[i] === ')') parenthesesCount--;
+            
+            if (str[i] === ',' && parenthesesCount === 0) {
+                parts.push(currentPart.trim());
+                currentPart = '';
+            } else {
+                currentPart += str[i];
+            }
+        }
+        
+        if (currentPart) {
+            parts.push(currentPart.trim());
+        }
+        
+        return parts;
+    }
+    
+    // Process each line
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i].trim();
+        if (!row || row === 'Acute Medication' || row === 'Repeat Medication') {
+            console.log('Skipping row:', row);
+            continue;
+        }
+        
+        console.log('\nProcessing row:', row);
+        
+        // Split the row by tabs or multiple spaces
+        const rowParts = row.split(/\t|\s{2,}/).filter(part => part.trim());
+        console.log('Row parts:', rowParts);
+        
+        if (rowParts.length < 2) continue;
+        
+        const lastIssue = rowParts[0].trim();
+        const drugInfo = rowParts[1].trim();
+        
+        // Process additional columns with their actual headers
+        const additionalInfo = [];
+        for (let j = 2; j < rowParts.length; j++) {
+            const value = rowParts[j].trim();
+            if (value && headerColumns[j]) {
+                additionalInfo.push(`<strong>${headerColumns[j]}: ${value}</strong>`);
+            }
+        }
+        
+        // Split drug info using parentheses-aware splitting
+        const drugParts = splitRespectingParentheses(drugInfo);
+        if (drugParts.length < 2) continue;
+        
+        const medication = drugParts[0].trim();
+        const dosageInstructions = drugParts.slice(1, -1).join(',').trim();
+        const quantity = drugParts[drugParts.length - 1].trim();
+        
+        // Combine instructions with additional info
+        let instructions = dosageInstructions;
+        if (additionalInfo.length > 0) {
+            instructions += '; ' + additionalInfo.join('; ');
+        }
+        
+        // Create comments
+        const comments = [
+            `Last Issue: ${lastIssue}`,
+            `Quantity: ${quantity}`
+        ].filter(Boolean).join(', ');
+        
+        processedRows.push([medication, instructions, comments].join('\t'));
+    }
+    
+    return processedRows.join('\n');
+}
+function formatRow(data) {
+    try {
+        // Combine instructions and patient comments
+        let instructions = data.instructions;
+        if (data.comments) {
+            instructions = `${instructions} (${data.comments})`;
+        }
+        
+        // Format comments section with quantity and issue date
+        let comments = [];
+        if (data.quantity) {
+            comments.push(`Quantity: ${data.quantity}`);
+        }
+        if (data.issueDate) {
+            comments.push(`Issue Date: ${data.issueDate}`);
+        }
+        
+        const formattedRow = [
+            data.medication,
+            instructions.trim(),
+            comments.join(', ')
+        ].join('\t');
+        
+        console.log('Formatted row:', formattedRow);
+        return formattedRow;
+        
+    } catch (error) {
+        console.error('Row formatting error:', error);
+        return null;
+    }
+}
+function formatProcessedRow(row) {
+    // Clean up and format the instructions
+    let instructions = row.instructions || '';
+    if (row.comments) {
+        instructions = instructions ? 
+            `${instructions} (${row.comments})` : row.comments;
+    }
+    
+    // Build comments combining quantity and issue date
+    let comments = [];
+    if (row.quantity) {
+        comments.push(`Quantity: ${row.quantity}`);
+    }
+    if (row.issueDate) {
+        comments.push(`Issue Date: ${row.issueDate.replace(/\n/g, ' ')}`);
+    }
+    
+    return [
+        row.medication,
+        instructions.trim(),
+        comments.join(', ')
+    ].join('\t');
+}
+function convertToTable(data, listNumber) {
+    try {
+        const rows = data.split('\n');
+        let tableHTML = `
+            <div class="table-controls">
+                <button onclick="resetTable(${listNumber})" class="reset-btn">Reset Table</button>
+                <button onclick="deleteSelectedRows(${listNumber})" class="delete-btn">Delete Selected</button>
+            </div>
+            <table class="data-table">`;
+        
+        // Header row
+        const headers = rows[0].split('\t');
+        tableHTML += '<thead><tr><th class="select-header">Select</th>';
+        headers.forEach(col => {
+            tableHTML += `<th class="table-header">${col || '&nbsp;'}</th>`;
+        });
+        tableHTML += '</tr></thead><tbody>';
+        
+        // Data rows
+        for (let i = 1; i < rows.length; i++) {
+            const columns = rows[i].split('\t');
+            tableHTML += `<tr data-row="${i}">`;
+            // Add checkbox column
+            tableHTML += `<td class="select-cell">
+                <input type="checkbox" class="row-select" onchange="updateRowSelection(this)">
+            </td>`;
+            // Add data cells
+            columns.forEach(col => {
+                tableHTML += `<td class="table-cell" contenteditable="true">${col || '—'}</td>`;
+            });
+            tableHTML += '</tr>';
+        }
+        
+        tableHTML += '</tbody></table>';
+        
+        const tableContainer = document.getElementById(`table${listNumber}Container`);
+        // Store original data for reset functionality
+        tableContainer.dataset.originalData = data;
+        tableContainer.innerHTML = tableHTML;
+        
+        // Add CSS for new features
+        addTableStyles();
+        initializeTableBehavior(listNumber);
+        
+    } catch (error) {
+        console.error('Error converting to table:', error);
+    }
+}
+
+function addTableStyles() {
+    if (document.getElementById('table-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'table-styles';
+    style.textContent = `
+        .table-controls {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .reset-btn, .delete-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .reset-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+        
+        .delete-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        
+        .reset-btn:hover { background-color: #1976D2; }
+        .delete-btn:hover { background-color: #D32F2F; }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .select-header, .select-cell {
+            width: 50px;
+            text-align: center !important;
+        }
+        
+        .data-table th {
+            background-color: #f5f5f5;
+            font-weight: 600;
+        }
+        
+        .table-cell {
+            position: relative;
+            min-height: 1.2em;
+        }
+        
+        .table-cell:focus {
+            outline: 2px solid #2196F3;
+            background-color: #fff;
+            padding: 7px;
+        }
+        
+        .table-cell:empty::before {
+            content: '—';
+            color: #999;
+        }
+        
+        .data-table tr.selected {
+            background-color: #e3f2fd;
+        }
+        
+        .row-select {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function initializeTableBehavior(listNumber) {
+    const table = document.querySelector(`#table${listNumber}Container table`);
+    
+    // Cell editing behavior
+    table.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+        cell.addEventListener('blur', () => {
+            cell.textContent = cell.textContent.trim() || '—';
+        });
+        
+        cell.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                cell.blur();
+            }
+        });
+    });
+}
+
+function updateRowSelection(checkbox) {
+    const row = checkbox.closest('tr');
+    row.classList.toggle('selected', checkbox.checked);
+}
+
+function deleteSelectedRows(listNumber) {
+    const table = document.querySelector(`#table${listNumber}Container table`);
+    const selectedRows = table.querySelectorAll('input.row-select:checked');
+    
+    if (selectedRows.length === 0) {
+        alert('No rows selected');
+        return;
+    }
+    
+    if (confirm(`Delete ${selectedRows.length} selected row(s)?`)) {
+        selectedRows.forEach(checkbox => {
+            checkbox.closest('tr').remove();
+        });
+    }
+}
+
+function resetTable(listNumber) {
+    const tableContainer = document.getElementById(`table${listNumber}Container`);
+    const originalData = tableContainer.dataset.originalData;
+    
+    if (confirm('Reset table to original data?')) {
+        convertToTable(originalData, listNumber);
+    }
+}
+    // Toggle between table and textarea views
+    function toggleEdit(listNumber) {
+        const textarea = document.getElementById(`list${listNumber}`);
+        const tableContainer = document.getElementById(`table${listNumber}Container`);
+        
+        if (textarea.classList.contains('hidden')) {
+            textarea.classList.remove('hidden');
+            tableContainer.classList.add('hidden');
+        } else {
+            textarea.classList.add('hidden');
+            tableContainer.classList.remove('hidden');
+            convertToTable(textarea.value, listNumber);
+        }
+    }
+
+    // Process list button click handler
+    function processList(listNumber) {
+        const text = document.getElementById(`list${listNumber}`).value;
+        const processedData = processInputData(text);
+        
+        if (processedData) {
+            convertToTable(processedData, listNumber);
+        } else {
+            console.warn('Unable to process data - format not recognized');
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Medication Reconciliation Tool</title>
+    <style>
+        /* Container styling for split-screen layout */
+        .container {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* Column styling for each medication list */
+        .column {
+            width: 48%;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        
+        /* Individual medication entry styling */
+        .medication-entry {
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: #f0f0f0;
+        }
+        
+        /* Table styling for formatted display */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        .data-table th {
+            background-color: #f2f2f2;
+        }
+        
+        /* Utility classes */
+        .hidden {
+            display: none;
+        }
+        
+        .error-row {
+            background-color: #ffe6e6;
+        }
+        
+        .merged-row {
+            background-color: #e6ffe6;
+        }
+        
+        /* Input area styling */
+        textarea {
+            width: 100%;
+            font-family: monospace;
+            white-space: pre;
+        }
+        
+        /* Button styling */
+        button {
+            margin: 5px;
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Medication Reconciliation Tool</h1>
+    <div class="container">
+        <div class="column">
+            <h2>List 1</h2>
+            <textarea id="list1" rows="20" cols="50" 
+                onpaste="handlePaste(event, 1)" 
+                placeholder="Paste medication list here"></textarea>
+            <button onclick="processList(1)">Process List 1</button>
+            <div id="table1Container"></div>
+        </div>
+        <div class="column">
+            <h2>List 2</h2>
+            <textarea id="list2" rows="20" cols="50" 
+                onpaste="handlePaste(event, 2)"
+                placeholder="Paste medication list here"></textarea>
+            <button onclick="processList(2)">Process List 2</button>
+            <div id="table2Container"></div>
+        </div>
+    </div>
+    <script>
+        // Medication dictionary for future use in matching medications
+        const medicationDict = {
+            'paracetamol': ['paracetamol', 'acetaminophen'],
+            'trimbow': ['trimbow', 'beclometasone/formoterol/glycopyrronium'],
+            'creon': ['creon', 'pancreatin', 'amylase/lipase/pancreatin/protease'],
+        };
+    
+        function processInputData(data) {     
+    console.log('Starting processInputData');
+    
+    // Check GNCR format first since it's most specific
+    if (isGNCRFormat(data)) {
+        console.log('Processing as GNCR format');
+        return formatGNCRData(data);
+    }
+    // Then check other formats
+    else if (isCurrentMedsFormat(data)) {         
+        console.log('Processing as Current Meds format');
+        return formatCurrentMedsData(data);     
+    } 
+    else if (isHMTFormat(data)) {         
+        console.log('Processing as HMT format');
+        return formatHMTData(data);     
+    } 
+    else if (isDischargeMedicationFormat(data)) {         
+        console.log('Processing as Discharge Medication format');
+        return formatDischargeMedicationData(data);     
+    }
+    
+    console.log('No matching format found');
+    return 'Medication\tInstructions'; 
+
+}
+function isCurrentMedsFormat(data) {
+    const firstLines = data.split('\n', 2);
+    return firstLines[0].trim() === 'Current Medications' && 
+           firstLines[1].trim() === '';
+}
+
+function formatCurrentMedsData(data) {
+    const lines = data.split('\n');
+    let processedRows = [];
+    let currentMedication = '';
+    let currentInstructions = '';
+    let currentComments = [];
+    
+    // Add header row
+    processedRows.push(['Medication', 'Instructions', 'Comments'].join('\t'));
+    
+    function hasCompleteBrackets(text) {
+        let bracketCount = 0;
+        for (let char of text) {
+            if (char === '(') bracketCount++;
+            if (char === ')') bracketCount--;
+        }
+        return bracketCount === 0 && text.includes('(') && text.includes(')');
+    }
+    
+    // Skip the "Current Medications" header and blank line
+    let i = 2;
+    
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+        
+        console.log(`\nProcessing line ${i}: "${line}"`);
+        
+        // Only process non-empty lines
+        if (trimmedLine) {
+            // Check if this is a new medication line by looking for complete brackets
+            const isNewMedication = hasCompleteBrackets(trimmedLine);
+            
+            if (isNewMedication) {
+                // Save previous entry if exists
+                if (currentMedication) {
+                    console.log('New medication line - saving previous entry:', {
+                        medication: currentMedication,
+                        instructions: currentInstructions,
+                        comments: [...currentComments]
+                    });
+                    processedRows.push([
+                        currentMedication,
+                        currentInstructions,
+                        currentComments.length ? currentComments.join(', ') : ''
+                    ].join('\t'));
+                }
+                
+                // Process new medication line
+                let lastClosingBracketIndex = -1;
+                let bracketCount = 0;
+                for (let j = 0; j < trimmedLine.length; j++) {
+                    if (trimmedLine[j] === '(') bracketCount++;
+                    if (trimmedLine[j] === ')') {
+                        bracketCount--;
+                        if (bracketCount === 0) {
+                            lastClosingBracketIndex = j;
+                        }
+                    }
+                }
+                
+                currentMedication = trimmedLine.substring(0, lastClosingBracketIndex + 1).trim();
+                currentInstructions = trimmedLine.substring(lastClosingBracketIndex + 1).trim();
+                currentComments = []; // Reset comments for new medication
+                
+                console.log('Started new medication entry:', {
+                    medication: currentMedication,
+                    instructions: currentInstructions
+                });
+            } else {
+                // This is a comment line
+                if (currentMedication) {
+                    console.log('Adding comment:', trimmedLine);
+                    currentComments.push(trimmedLine);
+                    console.log('Current comments:', [...currentComments]);
+                }
+            }
+        }
+        i++;
+    }
+    
+    // Add final entry if exists
+    if (currentMedication) {
+        console.log('Saving final entry:', {
+            medication: currentMedication,
+            instructions: currentInstructions,
+            comments: [...currentComments]
+        });
+        processedRows.push([
+            currentMedication,
+            currentInstructions,
+            currentComments.length ? currentComments.join(', ') : ''
+        ].join('\t'));
+    }
+    
+    return processedRows.join('\n');
+}
+function isDischargeMedicationFormat(data) {
+    try {
+        const rows = data.split('\n').filter(row => row.trim());
+        // Make discharge format check more specific
+        return rows.some(row => 
+            (row.includes('[') && row.includes(']')) &&
+            !(row.toLowerCase().includes('medication item')) // Exclude GNCR format
+        );
+    } catch (error) {
+        console.error('Error in isDischargeMedicationFormat:', error);
+        return false;
+    }
+}
+
+    // Add the new format processing function here
+    function formatDischargeMedicationData(data) {
+    let processedRows = [];
+    processedRows.push(['Medication', 'Instructions'].join('\t'));
+    
+    // Split into blocks of text separated by blank lines
+    const medications = data.split(/\n\s*\n/).filter(med => med.trim());
+    
+    medications.forEach(medBlock => {
+        // Split block into lines
+        const lines = medBlock.split('\n');
+        let medicationLine = '';
+        let instructionsLines = [];
+        
+        // Process each line in the block
+        lines.forEach(line => {
+            if (!line.startsWith('      ')) { // If not indented with 6 spaces
+                if (!medicationLine) {
+                    medicationLine = line;
+                } else {
+                    instructionsLines.push(line);
+                }
+            }
+        });
+        
+        if (medicationLine) {
+            let medicationName, instructions;
+            
+            if (medicationLine.includes('[')) {
+                const parts = medicationLine.split(/\],\s*/);
+                if (parts.length >= 2) {
+                    medicationName = parts[0] + ']';
+                    instructions = [parts[1].trim(), ...instructionsLines].filter(Boolean).join(' ');
+                }
+            } else {
+                const parts = medicationLine.split(',');
+                if (parts.length >= 2) {
+                    medicationName = parts[0];
+                    instructions = [parts.slice(1).join(',').trim(), ...instructionsLines].filter(Boolean).join(' ');
+                }
+            }
+            
+            if (medicationName && instructions) {
+                processedRows.push([medicationName, instructions].join('\t'));
+            }
+        }
+    });
+    
+    return processedRows.join('\n');
+}
+    
+function isHMTFormat(data) {
+    const rows = data.split('\n');
+    for (let row of rows) {
+        const columns = row.split('\t');  // Don't trim here
+        if (columns[0] === ' Medication') {  // Check for exact match including leading space
+            return true;
+        }
+    }
+    return false;
+}
+
+function formatHMTData(data) {
+    const rows = data.split('\n');
+    let processedRows = [];
+    let currentMedication = null;
+    let currentInstructions = null;
+    let currentComments = null;
+    let headerFound = false;
+    
+    // Add our standard header
+    processedRows.push(['Medication', 'Instructions', 'Comments']);
+    
+    // First find the input data's header row and skip it
+    let headerRowIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+        const columns = rows[i].split('\t');  // Don't trim here
+        if (columns[0] === ' Medication') {  // Check exact match including space
+            headerFound = true;
+            headerRowIndex = i;
+            break;
+        }
+    }
+    
+    if (!headerFound) {
+        console.warn('Not valid HMT format - " Medication" column not found');
+        return null;
+    }
+
+    function isNewMedicationLine(columns) {
+        if (!columns[0] || !columns[1]) return false;
+        
+        // Check if instruction starts with a number, 'See Taper', or 'See Protocol'
+        const instructionPattern = /^(\d|See Taper|See Protocol)/;
+        return instructionPattern.test(columns[1].trim());
+    }
+
+    // Process each row
+    for (let i = 0; i < rows.length; i++) {
+        // Skip the header row
+        if (i === headerRowIndex) continue;
+        
+        let columns = rows[i].split('\t').map(col => col.trim());
+        
+        // Skip empty rows
+        if (columns.every(col => !col)) continue;
+
+        if (isNewMedicationLine(columns)) {
+            // Save previous entry if exists
+            if (currentMedication) {
+                processedRows.push([
+                    currentMedication,
+                    currentInstructions || '',
+                    currentComments || ''
+                ]);
+            }
+            
+            // Start new entry
+            currentMedication = columns[0];
+            currentInstructions = columns[1];
+            // Combine all remaining columns into comments
+            currentComments = columns.slice(2).filter(col => col).join(' ');
+        } else {
+            // This is a continuation line
+            if (columns[0]) {
+                currentMedication = currentMedication ? 
+                    currentMedication + ' ' + columns[0] : columns[0];
+            }
+            if (columns[1]) {
+                currentInstructions = currentInstructions ? 
+                    currentInstructions + ' ' + columns[1] : columns[1];
+            }
+            // Add any additional columns to comments
+            const additionalComments = columns.slice(2).filter(col => col).join(' ');
+            if (additionalComments) {
+                currentComments = currentComments ? 
+                    currentComments + ' ' + additionalComments : additionalComments;
+            }
+        }
+    }
+    
+    // Add final entry if exists
+    if (currentMedication) {
+        processedRows.push([
+            currentMedication,
+            currentInstructions || '',
+            currentComments || ''
+        ]);
+    }
+    
+    return processedRows.map(row => row.join('\t')).join('\n');
+}
+    // Handle paste events
+    function handlePaste(event, listNumber) {
+    event.preventDefault();
+    
+    const clipboardData = event.clipboardData || window.clipboardData;
+    const pastedData = clipboardData.getData('text');
+    
+    // Preserve the exact formatting of the pasted text
+    const textarea = document.getElementById(`list${listNumber}`);
+    textarea.value = pastedData;
+    
+    // Enhanced debugging logs
+    console.log('Raw pasted data:', pastedData);
+    console.log('Pasted data with whitespace:', pastedData.replace(/ /g, '·'));
+    console.log('Is GNCR format:', isGNCRFormat(pastedData));
+    
+    // Process the data
+    const processedData = processInputData(pastedData);
+    console.log('Processed data:', processedData);
+    
+    if (processedData) {
+        console.log('Converting to table...');
+        convertToTable(processedData, listNumber);
+    } else {
+        console.error('Failed to process data');
+        console.log('Data format not recognized or processing failed');
+    }
+}
+function isGNCRFormat(data) {
+    try {
+        if (!data || typeof data !== 'string') {
+            console.log('GNCR Format Check: Invalid data type or empty');
+            return false;
+        }
+        
+        const rows = data.split('\n').filter(row => row.trim());
+        if (rows.length === 0) {
+            console.log('GNCR Format Check: No rows after filtering');
+            return false;
+        }
+
+        const headerRow = rows[0].trim();
+        const headers = headerRow.split('\t').map(h => h.trim().toLowerCase());
+        
+        // Check for required core headers
+        const requiredHeaders = [
+            'medication item',
+            'dosage instruction',
+            'quantity',
+            'issue date'
+        ];
+        
+        // Check if all required headers are present
+        const hasRequiredHeaders = requiredHeaders.every(header => headers.includes(header));
+        
+        console.log('GNCR Format Check:', {
+            headerRow: headerRow,
+            headers: headers,
+            requiredHeaders: requiredHeaders,
+            hasRequiredHeaders: hasRequiredHeaders
+        });
+        
+        return hasRequiredHeaders;
+        
+    } catch (error) {
+        console.error('GNCR Format check error:', error);
+        return false;
+    }
+}
+
+function formatGNCRData(data) {
+    try {
+        const rows = data.split('\n').filter(row => row.trim());
+        console.log('Initial row count:', rows.length);
+        
+        let processedRows = [];
+        processedRows.push(['Medication', 'Instructions', 'Comments'].join('\t'));
+        
+        // Get header indices for required columns
+        const headers = rows[0].split('\t').map(h => h.trim().toLowerCase());
+        const medicationIdx = headers.indexOf('medication item');
+        const instructionIdx = headers.indexOf('dosage instruction');
+        const quantityIdx = headers.indexOf('quantity');
+        const issueDateIdx = headers.indexOf('issue date');
+        
+        console.log('Column indices:', {
+            medicationIdx,
+            instructionIdx,
+            quantityIdx,
+            issueDateIdx
+        });
+        
+        // Get all comment column indices (any column after issue date)
+        const commentColumnIndices = [];
+        for (let i = issueDateIdx + 1; i < headers.length; i++) {
+            commentColumnIndices.push(i);
+        }
+        
+        console.log('Comment column indices:', commentColumnIndices);
+        
+        let currentData = null;
+        let currentComments = '';
+        
+        // Process each row starting after header
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const columns = row.split('\t');
+            
+            console.log('\nProcessing row', i, ':', {
+                rowText: row,
+                columnCount: columns.length,
+                medicationColumn: columns[medicationIdx],
+                allColumns: columns
+            });
+            
+            // Process every row that has a medication
+            if (columns[medicationIdx]) {
+                // Collect comments from all comment columns
+                currentComments = commentColumnIndices
+                    .map(idx => columns[idx] ? columns[idx].trim() : '')
+                    .filter(Boolean)
+                    .join(' | ');
+                
+                console.log('Collected comments:', currentComments);
+                
+                // Create new entry
+                currentData = {
+                    medication: columns[medicationIdx].trim(),
+                    instructions: columns[instructionIdx] ? columns[instructionIdx].trim() : '',
+                    quantity: columns[quantityIdx] ? columns[quantityIdx].trim() : '',
+                    issueDate: columns[issueDateIdx] ? columns[issueDateIdx].trim() : '',
+                    comments: currentComments
+                };
+                
+                console.log('Created new entry:', currentData);
+                
+                // Add entry immediately
+                processedRows.push(formatGNCRRow(currentData));
+            }
+        }
+        
+        console.log('Final processed row count:', processedRows.length);
+        return processedRows.join('\n');
+        
+    } catch (error) {
+        console.error('Error formatting GNCR data:', error);
+        return 'Medication\tInstructions\tComments';
+    }
+}
+function formatGNCRRow(data) {
+    try {
+        console.log('Formatting row data:', data);
+        
+        // Combine instructions and comments with semicolon and bold comments
+        let instructions = data.instructions;
+        if (data.comments) {
+            instructions = `${instructions}; <strong>${data.comments}</strong>`;
+        }
+        
+        // Build metadata comments
+        let comments = [];
+        if (data.quantity) {
+            comments.push(`Quantity: ${data.quantity}`);
+        }
+        if (data.issueDate) {
+            comments.push(`Issue Date: ${data.issueDate}`);
+        }
+        
+        const formattedRow = [
+            data.medication,
+            instructions.trim(),
+            comments.join(', ')
+        ].join('\t');
+        
+        console.log('Formatted row output:', formattedRow);
+        return formattedRow;
+        
+    } catch (error) {
+        console.error('Error formatting row:', error);
+        return `${data.medication || ''}\t${data.instructions || ''}\t`;
+    }
+}
+function formatRow(data) {
+    try {
+        // Combine instructions and patient comments
+        let instructions = data.instructions;
+        if (data.comments) {
+            instructions = `${instructions} (${data.comments})`;
+        }
+        
+        // Format comments section with quantity and issue date
+        let comments = [];
+        if (data.quantity) {
+            comments.push(`Quantity: ${data.quantity}`);
+        }
+        if (data.issueDate) {
+            comments.push(`Issue Date: ${data.issueDate}`);
+        }
+        
+        const formattedRow = [
+            data.medication,
+            instructions.trim(),
+            comments.join(', ')
+        ].join('\t');
+        
+        console.log('Formatted row:', formattedRow);
+        return formattedRow;
+        
+    } catch (error) {
+        console.error('Row formatting error:', error);
+        return null;
+    }
+}
+function formatProcessedRow(row) {
+    // Clean up and format the instructions
+    let instructions = row.instructions || '';
+    if (row.comments) {
+        instructions = instructions ? 
+            `${instructions} (${row.comments})` : row.comments;
+    }
+    
+    // Build comments combining quantity and issue date
+    let comments = [];
+    if (row.quantity) {
+        comments.push(`Quantity: ${row.quantity}`);
+    }
+    if (row.issueDate) {
+        comments.push(`Issue Date: ${row.issueDate.replace(/\n/g, ' ')}`);
+    }
+    
+    return [
+        row.medication,
+        instructions.trim(),
+        comments.join(', ')
+    ].join('\t');
+}
+function convertToTable(data, listNumber) {
+    try {
+        const rows = data.split('\n');
+        let tableHTML = '<table class="data-table">';
+        
+        rows.forEach((row, rowIndex) => {
+            const columns = row.split('\t');
+            
+            if (rowIndex === 0) {
+                // Header row
+                tableHTML += '<thead><tr>';
+                columns.forEach(col => {
+                    tableHTML += `<th class="table-header">${col || '&nbsp;'}</th>`;
+                });
+                tableHTML += '</tr></thead><tbody>';
+            } else {
+                // Data row - note that we don't escape HTML here to allow bold formatting
+                tableHTML += '<tr>';
+                columns.forEach(col => {
+                    tableHTML += `<td class="table-cell">${col || '&nbsp;'}</td>`;
+                });
+                tableHTML += '</tr>';
+            }
+        });
+        
+        tableHTML += '</tbody></table>';
+        
+        const tableContainer = document.getElementById(`table${listNumber}Container`);
+        tableContainer.innerHTML = tableHTML;
+        
+        // Add CSS for table formatting
+        const style = document.createElement('style');
+        style.textContent = `
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 10px 0;
+                table-layout: fixed;
+            }
+            .data-table th, .data-table td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+                vertical-align: top;
+            }
+            .data-table th {
+                background-color: #f2f2f2;
+            }
+            .table-cell {
+                word-wrap: break-word;
+                white-space: pre-wrap;
+            }
+            .data-table td:first-child { width: 30%; }
+            .data-table td:nth-child(2) { width: 40%; }
+            .data-table td:nth-child(3) { width: 30%; }
+            .data-table strong {
+                font-weight: bold;
+            }
+        `;
+        document.head.appendChild(style);
+        
+    } catch (error) {
+        console.error('Error converting to table:', error);
+    }
+}
+    // Toggle between table and textarea views
+    function toggleEdit(listNumber) {
+        const textarea = document.getElementById(`list${listNumber}`);
+        const tableContainer = document.getElementById(`table${listNumber}Container`);
+        
+        if (textarea.classList.contains('hidden')) {
+            textarea.classList.remove('hidden');
+            tableContainer.classList.add('hidden');
+        } else {
+            textarea.classList.add('hidden');
+            tableContainer.classList.remove('hidden');
+            convertToTable(textarea.value, listNumber);
+        }
+    }
+
+    // Process list button click handler
+    function processList(listNumber) {
+        const text = document.getElementById(`list${listNumber}`).value;
+        const processedData = processInputData(text);
+        
+        if (processedData) {
+            convertToTable(processedData, listNumber);
+        } else {
+            console.warn('Unable to process data - format not recognized');
+        }
+    }
+</script>
+</body>
+</html>
