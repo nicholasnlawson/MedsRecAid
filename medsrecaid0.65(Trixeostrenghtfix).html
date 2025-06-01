@@ -934,6 +934,11 @@
           clinimix: ["clinimix"],
           clindamycin: ["clindamycin", "dalacin", "zindaclin"],
           clobetasol: ["clobetasol", "dermovate", "etrivex"],
+          "clobetasol/neomycin/nystatin": [
+            "clobetasol/neomycin/nystatin",
+            "clobetasol 0.05% + neomycin & nystatin",
+            "dermovate nn",
+          ],
           clobetasone: ["clobetasone", "eumovate"],
           clobazam: ["clobazam", "frisium", "tapclob"],
           clofarabine: ["clofarabine", "evoltra"],
@@ -1111,7 +1116,8 @@
           degarelix: ["degarelix", "firmagon"],
           delstrigo: ["delstrigo", "doravirine/lamivudine/tenofovir"],
           dermol: ["Dermol", "Dermol Cream"],
-          "dermol 500": ["Dermol 500"],
+          "dermol 500": ["Dermol 500", "Dermol 500 lotion"],
+          "dermol 200": ["Dermol 200"],
           demeclocycline: ["demeclocycline", "ledermycin"],
           denosumab: ["denosumab", "prolia", "xgeva"],
           Doublebase: [
@@ -2940,7 +2946,11 @@
           tapentadol: ["tapentadol", "palexia"],
           taurolidine: ["taurolidine", "taurolock"],
           tazarotene: ["tazarotene", "zorac"],
-          "piperacillin/tazobactam": ["piperacillin/tazobactam", "tazocin"],
+          "piperacillin/tazobactam": [
+            "piperacillin/tazobactam",
+            "tazocin",
+            "Sod 4.5 g/ Sodium Chloride",
+          ],
           teclistamab: ["teclistamab", "tecvayli"],
           teduglutide: ["teduglutide", "revestive"],
           teicoplanin: ["teicoplanin", "targocid"],
@@ -3201,7 +3211,6 @@
           wysoy: ["wysoy formula"],
           Xailin: ["Xailin gel"],
           "Xailin Night": ["Xailin Night"],
-          xalacom: ["xalacom", "latanoprost/timolol"],
           xipamide: ["xipamide", "diurexan"],
           xylometazoline: [
             "xylometazoline hcl",
@@ -5301,6 +5310,13 @@
         return values.map(() => "");
       }
       function extractStrength(medicationString) {
+        if (isDermolPreparation(medicationString)) {
+          console.log(
+            "Skipping strength extraction for Dermol preparation:",
+            medicationString
+          );
+          return null;
+        }
         console.log("\nExtracting strength from:", medicationString);
         if (!medicationString) return null;
 
@@ -5345,7 +5361,6 @@
             ];
           }
 
-          // Try triple inhaler pattern
           const tripleInhalerPattern = new RegExp(
             `(?:` +
               // Pattern 1: Device name followed by strengths
@@ -5357,6 +5372,10 @@
               `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?\\s*[\\/,]\\s*` +
               `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?\\s*[\\/,]\\s*` +
               `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?.*?(?:${buildInhalerPattern()})` +
+              // ADD THIS NEW PATTERN:
+              `|` +
+              // Pattern 3: Compact format with no spaces often found in brackets
+              `[\\[\\(]?.*?(\\d+(?:\\.\\d+)?)\\s*\\/\\s*(\\d+(?:\\.\\d+)?)\\s*\\/\\s*(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)\\b` +
               `)`,
             "i"
           );
@@ -5463,7 +5482,39 @@
             ];
           }
         }
+        // Special handling for bracketed format with triple components
+        if (medicationString.includes("[")) {
+          const bracketContent = medicationString.match(/\[(.*?)\]/);
+          if (bracketContent && bracketContent[1]) {
+            const content = bracketContent[1];
+            // Try to find n/n/n pattern in bracket content
+            const triplePattern =
+              /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*(?:microg|mcg|μg|ug)/i;
+            const bracketTripleMatch = content.match(triplePattern);
 
+            if (bracketTripleMatch) {
+              console.log(
+                "Found triple component pattern in brackets:",
+                bracketTripleMatch
+              );
+              return [
+                {
+                  original: bracketContent[0],
+                  values: [
+                    parseFloat(bracketTripleMatch[1]),
+                    parseFloat(bracketTripleMatch[2]),
+                    parseFloat(bracketTripleMatch[3]),
+                  ],
+                  units: ["microg", "microg", "microg"], // Common units for inhalers
+                  isCombination: true,
+                  combinationType: "triple",
+                  fullMatch: bracketContent[0],
+                  isInhalerCombination: true,
+                },
+              ];
+            }
+          }
+        }
         // ----- SPECIAL CASE DETECTION -----
 
         // Check if this is a calcium/vitamin D combination
@@ -6347,6 +6398,10 @@
         }
       }
       function compareStrengths(med1, med2) {
+        if (isDermolPreparation(med1) || isDermolPreparation(med2)) {
+          console.log("Skipping strength comparison for Dermol preparation");
+          return null; // Return null to indicate comparison should be skipped
+        }
         console.log("\nComparing strengths:", {
           med1,
           med2,
@@ -7071,6 +7126,123 @@
 
         return standardNumerator / standardDenominator;
       }
+      function findMedicationMatchForBracketedFormats(
+        medicationString,
+        format
+      ) {
+        // Check if this is one of the formats that often contains bracketed medication names
+        const isBracketedFormat = ["HMT", "CURRENT_MEDS", "DISCHARGE"].includes(
+          format
+        );
+
+        if (!isBracketedFormat) {
+          // For non-bracketed formats, use the regular matching function
+          return findMedicationMatch(medicationString);
+        }
+
+        console.log(
+          `Processing ${format} format medication: "${medicationString}"`
+        );
+
+        // Try to find medication name after the first opening bracket
+        const openParenIndex = medicationString.indexOf("(");
+        const openBracketIndex = medicationString.indexOf("[");
+        let bracketContent = null;
+        let wholeMedication = medicationString;
+
+        // Check which bracket comes first (if any)
+        if (
+          openParenIndex >= 0 &&
+          (openBracketIndex < 0 || openParenIndex < openBracketIndex)
+        ) {
+          // Find matching closing parenthesis
+          let depth = 1;
+          let closeIndex = -1;
+
+          for (let i = openParenIndex + 1; i < medicationString.length; i++) {
+            if (medicationString[i] === "(") depth++;
+            if (medicationString[i] === ")") depth--;
+
+            if (depth === 0) {
+              closeIndex = i;
+              break;
+            }
+          }
+
+          if (closeIndex > openParenIndex) {
+            bracketContent = medicationString
+              .substring(openParenIndex + 1, closeIndex)
+              .trim();
+            console.log(`Found content in parentheses: "${bracketContent}"`);
+          }
+        } else if (openBracketIndex >= 0) {
+          // Find matching closing square bracket
+          let depth = 1;
+          let closeIndex = -1;
+
+          for (let i = openBracketIndex + 1; i < medicationString.length; i++) {
+            if (medicationString[i] === "[") depth++;
+            if (medicationString[i] === "]") depth--;
+
+            if (depth === 0) {
+              closeIndex = i;
+              break;
+            }
+          }
+
+          if (closeIndex > openBracketIndex) {
+            bracketContent = medicationString
+              .substring(openBracketIndex + 1, closeIndex)
+              .trim();
+            console.log(
+              `Found content in square brackets: "${bracketContent}"`
+            );
+          }
+        }
+
+        // Strategy 1: Try to match the content inside brackets if available
+        if (bracketContent) {
+          const bracketMatch = findMedicationMatch(bracketContent);
+          if (bracketMatch !== "unknown medication") {
+            console.log(`Found match from bracket content: "${bracketMatch}"`);
+            return bracketMatch;
+          }
+        }
+
+        // Strategy 2: Try to match the whole medication string
+        const wholeMatch = findMedicationMatch(wholeMedication);
+        if (wholeMatch !== "unknown medication") {
+          console.log(
+            `Found match from whole medication string: "${wholeMatch}"`
+          );
+          return wholeMatch;
+        }
+
+        // Strategy 3: If brackets were found but matching failed, try the part before brackets
+        if (openParenIndex > 0 || openBracketIndex > 0) {
+          const startIndex = Math.min(
+            openParenIndex >= 0 ? openParenIndex : medicationString.length,
+            openBracketIndex >= 0 ? openBracketIndex : medicationString.length
+          );
+
+          const textBeforeBracket = medicationString
+            .substring(0, startIndex)
+            .trim();
+          if (textBeforeBracket) {
+            const beforeBracketMatch = findMedicationMatch(textBeforeBracket);
+            if (beforeBracketMatch !== "unknown medication") {
+              console.log(
+                `Found match from text before bracket: "${beforeBracketMatch}"`
+              );
+              return beforeBracketMatch;
+            }
+          }
+        }
+
+        // No match found
+        console.log("No medication match found");
+        return "unknown medication";
+      }
       function compareMedicationLists() {
         // Get tables and their formats
         const table1Container = document.getElementById("table1Container");
@@ -7086,7 +7258,7 @@
         }
 
         // Get medications from both tables
-        const getMedicationsFromTable = (table) => {
+        const getMedicationsFromTable = (table, format) => {
           const meds = [];
           const rows = table.querySelectorAll("tbody tr");
           rows.forEach((row, index) => {
@@ -7096,7 +7268,11 @@
               const instructions = cells[2]?.textContent.trim() || "";
               const comments = cells[3]?.textContent.trim() || "";
 
-              const standardizedName = findMedicationMatch(medName);
+              // Use the new matching function with format information
+              const standardizedName = findMedicationMatchForBracketedFormats(
+                medName,
+                format
+              );
 
               meds.push({
                 original: medName,
@@ -7112,8 +7288,8 @@
           return meds;
         };
 
-        const list1Meds = getMedicationsFromTable(table1);
-        const list2Meds = getMedicationsFromTable(table2);
+        const list1Meds = getMedicationsFromTable(table1, format1);
+        const list2Meds = getMedicationsFromTable(table2, format2);
 
         // Initialize comparison results
         const matches = [];
@@ -7692,6 +7868,12 @@
             }
         </div>
     `;
+      }
+      function isDermolPreparation(medicationString) {
+        if (!medicationString) return false;
+
+        const lowerMed = medicationString.toLowerCase();
+        return lowerMed.includes("dermol");
       }
 
       function highlightFormulationAndStrength(text, comparisonMed) {
@@ -8882,21 +9064,22 @@
             return false;
           }
 
-          // Check for the characteristic headers
+          // Check for the characteristic headers (only requiring the first two columns)
           const headerRow = rows[0].trim();
+          const headerCols = headerRow
+            .split("\t")
+            .map((h) => h.trim().toLowerCase());
+
+          // Check if the first two required headers are present
           return (
-            headerRow.includes("Medication Item") &&
-            headerRow.includes("Instructions") &&
-            (headerRow.includes("Patient Comments") ||
-              headerRow.includes("Acute Medication") ||
-              headerRow.includes("Repeat Medication"))
+            headerCols.some((h) => h.includes("medication item")) &&
+            headerCols.some((h) => h.includes("instructions"))
           );
         } catch (error) {
           console.error("GNCR Abridged Format check error:", error);
           return false;
         }
       }
-
       function formatGNCRAbridgedData(data) {
         try {
           const rows = data.split("\n").filter((row) => row.trim());
@@ -8907,23 +9090,40 @@
             ["Medication", "Instructions", "Comments"].join("\t")
           );
 
-          // Get header indices
+          // Get header indices with more flexible handling
           const headerRow = rows[0].trim();
           const columns = headerRow.split(/\t/);
+
+          // Find required columns (case-insensitive matching)
           const medicationIdx = columns.findIndex((h) =>
-            h.includes("Medication Item")
+            h.toLowerCase().includes("medication item")
           );
           const instructionIdx = columns.findIndex((h) =>
-            h.includes("Instructions")
+            h.toLowerCase().includes("instructions")
           );
-          const patientCommentsIdx = columns.findIndex((h) =>
-            h.includes("Patient Comments")
-          );
+
+          // Find optional columns - any column that might contain comments
+          const commentCandidateIndices = [];
+          columns.forEach((header, idx) => {
+            const headerLower = header.toLowerCase();
+            if (
+              idx !== medicationIdx &&
+              idx !== instructionIdx &&
+              (headerLower.includes("comment") ||
+                headerLower.includes("acute") ||
+                headerLower.includes("repeat") ||
+                headerLower.includes("note") ||
+                headerLower.includes("status") ||
+                headerLower.includes("info"))
+            ) {
+              commentCandidateIndices.push(idx);
+            }
+          });
 
           console.log("Column indices:", {
             medicationIdx,
             instructionIdx,
-            patientCommentsIdx,
+            commentCandidateIndices,
           });
 
           // List of rows to exclude
@@ -8949,11 +9149,16 @@
             const rowColumns = row.split(/\t/);
 
             // Process row if it has a medication
-            if (rowColumns[medicationIdx] && rowColumns[medicationIdx].trim()) {
+            if (
+              medicationIdx < rowColumns.length &&
+              rowColumns[medicationIdx] &&
+              rowColumns[medicationIdx].trim()
+            ) {
               const medication = rowColumns[medicationIdx].trim();
-              let instructionsText = rowColumns[instructionIdx]
-                ? rowColumns[instructionIdx].trim()
-                : "";
+              let instructionsText =
+                instructionIdx < rowColumns.length && rowColumns[instructionIdx]
+                  ? rowColumns[instructionIdx].trim()
+                  : "";
 
               // Parse column with specific pattern
               let mainInstructions = instructionsText;
@@ -8997,13 +9202,30 @@
                 }
               }
 
-              // Add patient comments from separate column if available
-              if (patientCommentsIdx !== -1 && rowColumns[patientCommentsIdx]) {
-                const patientComments = rowColumns[patientCommentsIdx].trim();
-                if (patientComments) {
-                  additionalInfo += additionalInfo ? "; " : "";
-                  additionalInfo += patientComments;
+              // Collect all comments from comment candidate columns
+              let additionalComments = [];
+              commentCandidateIndices.forEach((idx) => {
+                if (
+                  idx < rowColumns.length &&
+                  rowColumns[idx] &&
+                  rowColumns[idx].trim()
+                ) {
+                  // Add column header as prefix if it's not a generic "Comments" header
+                  const header = columns[idx].trim();
+                  const value = rowColumns[idx].trim();
+
+                  if (header.toLowerCase().includes("comment")) {
+                    additionalComments.push(value);
+                  } else {
+                    additionalComments.push(`${header}: ${value}`);
+                  }
                 }
+              });
+
+              // Add collected comments to additional info
+              if (additionalComments.length > 0) {
+                additionalInfo += additionalInfo ? "; " : "";
+                additionalInfo += additionalComments.join("; ");
               }
 
               // Format instructions with bold additional info

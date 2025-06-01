@@ -934,6 +934,11 @@
           clinimix: ["clinimix"],
           clindamycin: ["clindamycin", "dalacin", "zindaclin"],
           clobetasol: ["clobetasol", "dermovate", "etrivex"],
+          "clobetasol/neomycin/nystatin": [
+            "clobetasol/neomycin/nystatin",
+            "clobetasol 0.05% + neomycin & nystatin",
+            "dermovate nn",
+          ],
           clobetasone: ["clobetasone", "eumovate"],
           clobazam: ["clobazam", "frisium", "tapclob"],
           clofarabine: ["clofarabine", "evoltra"],
@@ -1111,7 +1116,8 @@
           degarelix: ["degarelix", "firmagon"],
           delstrigo: ["delstrigo", "doravirine/lamivudine/tenofovir"],
           dermol: ["Dermol", "Dermol Cream"],
-          "dermol 500": ["Dermol 500"],
+          "dermol 500": ["Dermol 500", "Dermol 500 lotion"],
+          "dermol 200": ["Dermol 200"],
           demeclocycline: ["demeclocycline", "ledermycin"],
           denosumab: ["denosumab", "prolia", "xgeva"],
           Doublebase: [
@@ -1996,7 +2002,7 @@
           laronidase: ["laronidase", "aldurazyme"],
           "lassars paste": ["lassars paste"],
           latanoprost: ["latanoprost", "xalatan", "monopost"],
-          "latanoprost/timolol": ["latanoprost/timolol", "xalacom"],
+          "latanoprost/timolol": ["xalacom", "latanoprost/timolol"],
           lecicarbon: ["lecicarbon"],
           leflunomide: ["leflunomide", "arava"],
           lenalidomide: ["lenalidomide", "revlimid"],
@@ -2940,7 +2946,11 @@
           tapentadol: ["tapentadol", "palexia"],
           taurolidine: ["taurolidine", "taurolock"],
           tazarotene: ["tazarotene", "zorac"],
-          "piperacillin/tazobactam": ["piperacillin/tazobactam", "tazocin"],
+          "piperacillin/tazobactam": [
+            "piperacillin/tazobactam",
+            "tazocin",
+            "Sod 4.5 g/ Sodium Chloride",
+          ],
           teclistamab: ["teclistamab", "tecvayli"],
           teduglutide: ["teduglutide", "revestive"],
           teicoplanin: ["teicoplanin", "targocid"],
@@ -3728,6 +3738,7 @@
                   "soln",
                   "elixir",
                   "liquid",
+                  "linctus",
                   "mixture",
                   "mixt",
                   "oral liquid",
@@ -4544,6 +4555,28 @@
           "million iu": 1000000,
           "mega iu": 1000000,
         },
+
+        // Add this new molar category
+        molar: {
+          // Micromole units (to mmol)
+          micromol: 0.001,
+          µmol: 0.001,
+          umol: 0.001,
+          micromole: 0.001,
+          micromoles: 0.001,
+
+          // Millimole units (base unit)
+          mmol: 1,
+          millimol: 1,
+          millimole: 1,
+          millimoles: 1,
+
+          // Mole units
+          mol: 1000,
+          mole: 1000,
+          moles: 1000,
+        },
+
         volume: {
           ml: 1,
           mL: 1,
@@ -4554,6 +4587,7 @@
           litre: 1000,
           liter: 1000,
         },
+
         percentage: {
           "%": 1,
           percent: 1,
@@ -4650,6 +4684,27 @@
           kilograms: 1000000,
         };
 
+        // ADD THIS NEW SECTION: Molar conversions (standardize to mmol)
+        const molarConversions = {
+          // Micromole units (to mmol)
+          micromol: 0.001,
+          µmol: 0.001,
+          umol: 0.001,
+          micromole: 0.001,
+          micromoles: 0.001,
+
+          // Millimole units (base unit)
+          mmol: 1,
+          millimol: 1,
+          millimole: 1,
+          millimoles: 1,
+
+          // Mole units (to mmol)
+          mol: 1000,
+          mole: 1000,
+          moles: 1000,
+        };
+
         // Volume conversions (standardize to mL)
         const volumeConversions = {
           // Microliter units (to mL)
@@ -4718,6 +4773,10 @@
           percent: 1,
           percentage: 1,
         };
+        // Check if unit is in molar conversions
+        if (molarConversions.hasOwnProperty(unitLower)) {
+          return value * molarConversions[unitLower];
+        }
 
         // Handle million/mega unit patterns in the unit string
         if (unitLower.match(/^(?:million|mega|m)\s*(?:unit|units|u|iu)s?$/i)) {
@@ -5300,16 +5359,219 @@
         // Default to empty units if no specific rule applies
         return values.map(() => "");
       }
+      // Pattern for inhaler combinations - define this before extractStrength function
+      function buildInhalerPattern() {
+        const patterns = [];
+        const inhaled = formulationDict.inhaled.priority_groups;
+
+        Object.values(inhaled.specific_devices.terms).forEach((terms) => {
+          patterns.push(...terms);
+        });
+
+        Object.values(inhaled.device_types.terms).forEach((terms) => {
+          patterns.push(...terms);
+        });
+
+        patterns.push(...inhaled.generic_terms.terms);
+        patterns.push("inhaler", "mdi", "pmdi");
+
+        return patterns
+          .map((term) => term.replace(/[-\/\.\(\)]/g, "\\$&"))
+          .sort((a, b) => b.length - a.length)
+          .join("|");
+      }
+
+      // Pattern for double inhaler combinations
+      const inhalerComboPattern = new RegExp(
+        `(?:` +
+          // Pattern 1: Device name followed by strengths
+          `(?:${buildInhalerPattern()}).*?(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?\\s*[\\/,]\\s*` +
+          `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?` +
+          `|` +
+          // Pattern 2: Strengths followed by device name
+          `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?\\s*[\\/,]\\s*` +
+          `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?.*?(?:${buildInhalerPattern()})` +
+          `)`,
+        "i"
+      );
+
+      // Pattern for single inhaler strengths
+      const singleInhalerPattern = new RegExp(
+        `(?:` +
+          // Pattern 1: Device name followed by strength
+          `(?:${buildInhalerPattern()}).*?(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?` +
+          `|` +
+          // Pattern 2: Strength followed by device name
+          `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?.*?(?:${buildInhalerPattern()})` +
+          `)`,
+        "i"
+      );
+
       function extractStrength(medicationString) {
+        if (isDermolPreparation(medicationString)) {
+          console.log(
+            "Skipping strength extraction for Dermol preparation:",
+            medicationString
+          );
+          return null;
+        }
         console.log("\nExtracting strength from:", medicationString);
         if (!medicationString) return null;
 
         const strengths = [];
         const textToAnalyze = medicationString;
 
+        // --- COMBINATION MEDICATION DETECTION ---
+        // First try to detect if this is a combination product based on the medication dictionary
+        const combinationDetectionResult =
+          detectCombinationMedication(medicationString);
+        if (combinationDetectionResult) {
+          console.log(
+            "Detected combination medication:",
+            combinationDetectionResult.standardName
+          );
+
+          // --- SPECIAL HANDLING FOR KNOWN TRIPLE INHALERS ---
+          // Check for triple inhalers by brand name or component combinations
+          const lowerMed = medicationString.toLowerCase();
+          if (
+            lowerMed.includes("trimbow") ||
+            lowerMed.includes("trelegy") ||
+            lowerMed.includes("trixeo") ||
+            lowerMed.includes("enerzair") ||
+            /beclometa.+formoterol.+glycopyr/i.test(lowerMed) ||
+            /fluticasone.+umeclidinium.+vilanterol/i.test(lowerMed) ||
+            /glycopyrronium.+formoterol.+budes/i.test(lowerMed) ||
+            /indacaterol.+mometasone.+glycopyr/i.test(lowerMed)
+          ) {
+            // Force component count to 3 for these known triple combinations
+            combinationDetectionResult.componentCount = 3;
+            console.log(
+              "Detected triple inhaler, setting component count to 3"
+            );
+          }
+
+          // Extract numbers that are very likely to be strength values
+          // For inhalers, we want to find numbers followed by units, not part of words
+          let allNumbers = [];
+
+          // If this is a known triple inhaler brand, look for numbers with units
+          if (
+            lowerMed.includes("trimbow") ||
+            lowerMed.includes("trelegy") ||
+            lowerMed.includes("trixeo") ||
+            lowerMed.includes("enerzair")
+          ) {
+            // First try to find numbers with units
+            const numberUnitRegex = /\b(\d+)(?:\s*(?:microg|mcg|μg|ug))?\b/g;
+            let match;
+            let numberUnitPairs = [];
+
+            while ((match = numberUnitRegex.exec(lowerMed)) !== null) {
+              // Make sure it's not part of a word (like "parti3")
+              if (match.index > 0) {
+                const charBefore = lowerMed.charAt(match.index - 1);
+                if (/[a-z]/i.test(charBefore)) {
+                  continue; // Skip if number is part of a word
+                }
+              }
+
+              numberUnitPairs.push(parseFloat(match[1]));
+            }
+
+            // For Trimbow, enforce the standard 87/5/9 pattern if we recognize it
+            if (
+              lowerMed.includes("trimbow") &&
+              numberUnitPairs.includes(87) &&
+              numberUnitPairs.includes(5) &&
+              numberUnitPairs.includes(9)
+            ) {
+              allNumbers = [87, 5, 9];
+            }
+            // Otherwise use the discovered numbers as long as we have enough
+            else if (numberUnitPairs.length >= 3) {
+              allNumbers = numberUnitPairs.slice(0, 3);
+            }
+            // Fall back to standard number extraction if needed
+            else {
+              allNumbers = medicationString.match(/\b\d+(?:\.\d+)?\b/g) || [];
+              // Filter out numbers that are part of words (like "parti3")
+              allNumbers = allNumbers.filter((num) => {
+                const numIndex = lowerMed.indexOf(num);
+                // Check character before the number (if not at beginning)
+                if (numIndex > 0) {
+                  if (/[a-z]/i.test(lowerMed.charAt(numIndex - 1))) {
+                    return false;
+                  }
+                }
+                // Check character after the number (if not at end)
+                if (numIndex + num.length < lowerMed.length) {
+                  if (/[a-z]/i.test(lowerMed.charAt(numIndex + num.length))) {
+                    return false;
+                  }
+                }
+                return true;
+              });
+            }
+          } else {
+            // For other medications, use standard number extraction
+            allNumbers = medicationString.match(/\b\d+(?:\.\d+)?\b/g) || [];
+          }
+
+          console.log("Found numbers:", allNumbers);
+
+          if (allNumbers && allNumbers.length >= 2) {
+            // Determine if this is a double or triple combination
+            const componentCount = combinationDetectionResult.componentCount;
+            console.log("Component count:", componentCount);
+
+            // Get the appropriate units based on the medication name
+            const units = inferUnitsFromMedication(
+              combinationDetectionResult.standardName,
+              medicationString
+            );
+
+            // Format the response based on component count
+            if (componentCount === 3 && allNumbers.length >= 3) {
+              // Triple combination
+              return [
+                {
+                  original: medicationString,
+                  values: [
+                    parseFloat(allNumbers[0]),
+                    parseFloat(allNumbers[1]),
+                    parseFloat(allNumbers[2]),
+                  ],
+                  units:
+                    units.length === 3 ? units : ["microg", "microg", "microg"], // Default if inference fails
+                  isCombination: true,
+                  combinationType: "triple",
+                  fullMatch: medicationString,
+                  isInhalerCombination: true,
+                },
+              ];
+            } else {
+              // Double combination - use the first two numbers found
+              return [
+                {
+                  original: medicationString,
+                  values: [
+                    parseFloat(allNumbers[0]),
+                    parseFloat(allNumbers[1]),
+                  ],
+                  units: units.length === 2 ? units : ["microg", "microg"], // Default if inference fails
+                  isCombination: true,
+                  combinationType: "double",
+                  fullMatch: medicationString,
+                  isInhalerCombination: true,
+                },
+              ];
+            }
+          }
+        }
         // ----- INHALER BRAND NAME DETECTION -----
         const inhalerBrands =
-          /fostair|symbicort|duoresp|seretide|flutiform|fobumix|combisal|relvar|trimbow|trelegy|anoro|striverdi|spiriva|qvar|clenil|alvesco|pulmicort|atimos|serevent|salbutamol|ventolin|airomir/i;
+          /fostair|symbicort|duoresp|seretide|flutiform|fobumix|combisal|relvar|trimbow|trelegy|trixeo|enerzair|anoro|striverdi|spiriva|qvar|clenil|alvesco|pulmicort|atimos|serevent|salbutamol|ventolin|airomir/i;
         const isInhaler =
           inhalerBrands.test(medicationString) ||
           /inhaler|mdi|pmdi|turbohaler|accuhaler|evohaler|diskus|nebuliser|respimat|easyhaler|spiromax|novolizer|genuair|breezhaler|handihaler|aerosol/i.test(
@@ -5319,6 +5581,130 @@
         // ----- SPECIALIZED INHALER PATTERN HANDLING -----
         if (isInhaler) {
           console.log("Processing as inhaler medication");
+
+          // --- SPECIAL HANDLING FOR TRIPLE INHALERS WITHOUT GOING THROUGH DETECTION ---
+          // Check for known triple inhaler brands directly
+          const lowerMed = medicationString.toLowerCase();
+          if (
+            lowerMed.includes("trimbow") ||
+            lowerMed.includes("trelegy") ||
+            lowerMed.includes("trixeo") ||
+            lowerMed.includes("enerzair") ||
+            /beclometa.+formoterol.+glycopyr/i.test(lowerMed) ||
+            /fluticasone.+umecli.+vilant/i.test(lowerMed) ||
+            /glycopyr.+formoterol.+budes/i.test(lowerMed) ||
+            /indacaterol.+mometasone.+glycopyr/i.test(lowerMed)
+          ) {
+            // Special case for Trimbow's standard strengths
+            if (lowerMed.includes("trimbow")) {
+              // Try to find numbers with units
+              const numberUnitRegex = /\b(\d+)(?:\s*(?:microg|mcg|μg|ug))?\b/g;
+              let match;
+              let numberUnitPairs = [];
+
+              while ((match = numberUnitRegex.exec(lowerMed)) !== null) {
+                // Make sure it's not part of a word (like "parti3")
+                if (match.index > 0) {
+                  const charBefore = lowerMed.charAt(match.index - 1);
+                  if (/[a-z]/i.test(charBefore)) {
+                    continue; // Skip if number is part of a word
+                  }
+                }
+
+                numberUnitPairs.push(parseFloat(match[1]));
+              }
+
+              // Look for Trimbow's specific 87/5/9 pattern
+              if (
+                numberUnitPairs.includes(87) &&
+                numberUnitPairs.includes(5) &&
+                numberUnitPairs.includes(9)
+              ) {
+                console.log("Found Trimbow standard 87/5/9 pattern");
+                return [
+                  {
+                    original: medicationString,
+                    values: [87, 5, 9],
+                    units: ["microg", "microg", "microg"],
+                    isCombination: true,
+                    combinationType: "triple",
+                    fullMatch: medicationString,
+                    isInhalerCombination: true,
+                  },
+                ];
+              }
+            }
+
+            // Try to find the three component pattern n/n/n in the string
+            const tripleSlashPattern = /(\d+)\/(\d+)\/(\d+)/;
+            const slashMatch = lowerMed.match(tripleSlashPattern);
+
+            if (slashMatch) {
+              console.log(
+                "Found triple slash pattern in known triple inhaler:",
+                slashMatch[0]
+              );
+              return [
+                {
+                  original: medicationString,
+                  values: [
+                    parseFloat(slashMatch[1]),
+                    parseFloat(slashMatch[2]),
+                    parseFloat(slashMatch[3]),
+                  ],
+                  units: ["microg", "microg", "microg"],
+                  isCombination: true,
+                  combinationType: "triple",
+                  fullMatch: medicationString,
+                  isInhalerCombination: true,
+                },
+              ];
+            }
+
+            // Look for numbers with unit suffixes
+            const numberWithUnitMatches = [];
+            const numberWithUnitRegex =
+              /\b(\d+)(?:\s*(?:microg|mcg|μg|ug))?\b/g;
+            let match;
+
+            // Find numbers that are followed by units and not part of words
+            while ((match = numberWithUnitRegex.exec(lowerMed)) !== null) {
+              // Check if the number is part of a word (like "parti3")
+              if (match.index > 0) {
+                const charBefore = lowerMed.charAt(match.index - 1);
+                if (/[a-z]/i.test(charBefore)) {
+                  continue; // Skip if number is part of a word
+                }
+              }
+
+              numberWithUnitMatches.push(parseFloat(match[1]));
+              if (numberWithUnitMatches.length >= 3) break;
+            }
+
+            if (numberWithUnitMatches.length >= 3) {
+              console.log(
+                "Extracted standalone numbers with units from known triple inhaler:",
+                numberWithUnitMatches[0],
+                numberWithUnitMatches[1],
+                numberWithUnitMatches[2]
+              );
+              return [
+                {
+                  original: medicationString,
+                  values: [
+                    numberWithUnitMatches[0],
+                    numberWithUnitMatches[1],
+                    numberWithUnitMatches[2],
+                  ],
+                  units: ["microg", "microg", "microg"],
+                  isCombination: true,
+                  combinationType: "triple",
+                  fullMatch: medicationString,
+                  isInhalerCombination: true,
+                },
+              ];
+            }
+          }
 
           // Check for inhaler shorthand notation (n/n format)
           const inhalerShorthandPattern =
@@ -5345,7 +5731,6 @@
             ];
           }
 
-          // Try triple inhaler pattern
           const tripleInhalerPattern = new RegExp(
             `(?:` +
               // Pattern 1: Device name followed by strengths
@@ -5357,32 +5742,9 @@
               `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?\\s*[\\/,]\\s*` +
               `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?\\s*[\\/,]\\s*` +
               `(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)(?:\\/(?:dose|actuation))?.*?(?:${buildInhalerPattern()})` +
-              `)`,
-            "i"
-          );
-
-          // For double inhalers
-          const inhalerComboPattern = new RegExp(
-            `(?:` +
-              // Pattern 1: Device name followed by strengths
-              `(?:${buildInhalerPattern()}).*?(\\d+(?:\\.\\d+)?)\\s*(?:microg|mcg|μg|ug)(?:rams)?(?:\\/\\s*(?:dose\\s*)?)\\s*\\/\\s*` +
-              `(\\d+(?:\\.\\d+)?)\\s*(?:microg|mcg|μg|ug)(?:rams)?(?:\\/\\s*(?:dose\\s*)?)\\s*` +
+              // Pattern 3: Compact format with no spaces often found in brackets
               `|` +
-              // Pattern 2: Strengths followed by device name
-              `(\\d+(?:\\.\\d+)?)\\s*(?:microg|mcg|μg|ug)(?:rams)?(?:\\/\\s*(?:dose\\s*)?)\\s*\\/\\s*` +
-              `(\\d+(?:\\.\\d+)?)\\s*(?:microg|mcg|μg|ug)(?:rams)?(?:\\/\\s*(?:dose\\s*)?).*?(?:${buildInhalerPattern()})` +
-              `)`,
-            "i"
-          );
-
-          // Modified version to handle both orders
-          const singleInhalerPattern = new RegExp(
-            `(?:` +
-              // Pattern 1: Device name followed by strength
-              `(?:${buildInhalerPattern()}).*?(\\d+(?:\\.\\d+)?)\\s*(?:microg|mcg|μg|ug)(?:rams)?(?:\\/\\s*(?:dose\\s*)?)\\s*` +
-              `|` +
-              // Pattern 2: Strength followed by device name
-              `(\\d+(?:\\.\\d+)?)\\s*(?:microg|mcg|μg|ug)(?:rams)?(?:\\/\\s*(?:dose\\s*)?).*?(?:${buildInhalerPattern()})` +
+              `[\\[\\(]?.*?(\\d+(?:\\.\\d+)?)\\s*\\/\\s*(\\d+(?:\\.\\d+)?)\\s*\\/\\s*(\\d+(?:\\.\\d+)?)\\s*(?:microg(?:ram)?s?|mcg|μg|ug)\\b` +
               `)`,
             "i"
           );
@@ -5399,11 +5761,17 @@
                 parseFloat(tripleMatch[2]),
                 parseFloat(tripleMatch[3]),
               ];
-            } else {
+            } else if (tripleMatch[4] && tripleMatch[5] && tripleMatch[6]) {
               values = [
                 parseFloat(tripleMatch[4]),
                 parseFloat(tripleMatch[5]),
                 parseFloat(tripleMatch[6]),
+              ];
+            } else if (tripleMatch[7] && tripleMatch[8] && tripleMatch[9]) {
+              values = [
+                parseFloat(tripleMatch[7]),
+                parseFloat(tripleMatch[8]),
+                parseFloat(tripleMatch[9]),
               ];
             }
             console.log("Extracted values:", values);
@@ -5422,45 +5790,93 @@
 
           // Then try double inhaler
           console.log("Checking for double inhaler pattern");
-          const doubleMatch = textToAnalyze.match(inhalerComboPattern);
-          if (doubleMatch) {
-            let values;
-            if (doubleMatch[1] && doubleMatch[2]) {
-              values = [parseFloat(doubleMatch[1]), parseFloat(doubleMatch[2])];
-            } else {
-              values = [parseFloat(doubleMatch[3]), parseFloat(doubleMatch[4])];
+          try {
+            const doubleMatch = textToAnalyze.match(inhalerComboPattern);
+            if (doubleMatch) {
+              let values;
+              if (doubleMatch[1] && doubleMatch[2]) {
+                values = [
+                  parseFloat(doubleMatch[1]),
+                  parseFloat(doubleMatch[2]),
+                ];
+              } else {
+                values = [
+                  parseFloat(doubleMatch[3]),
+                  parseFloat(doubleMatch[4]),
+                ];
+              }
+              console.log("Extracted double inhaler values:", values);
+              return [
+                {
+                  original: doubleMatch[0],
+                  values: values,
+                  units: ["microg", "microg"],
+                  isCombination: true,
+                  combinationType: "double",
+                  fullMatch: doubleMatch[0],
+                  isInhalerCombination: true,
+                },
+              ];
             }
-            console.log("Extracted double inhaler values:", values);
-            return [
-              {
-                original: doubleMatch[0],
-                values: values,
-                units: ["microg", "microg"],
-                isCombination: true,
-                combinationType: "double",
-                fullMatch: doubleMatch[0],
-                isInhalerCombination: true,
-              },
-            ];
+          } catch (error) {
+            console.error("Error matching double inhaler pattern:", error);
           }
 
           // Finally try single inhaler
           console.log("Checking for single inhaler pattern");
-          const singleMatch = textToAnalyze.match(singleInhalerPattern);
-          if (singleMatch) {
-            const value = parseFloat(singleMatch[1] || singleMatch[2]);
-            console.log("Extracted single inhaler value:", value);
-            return [
-              {
-                original: singleMatch[0],
-                values: [value],
-                units: ["microg"],
-                isCombination: false,
-                combinationType: "single",
-                fullMatch: singleMatch[0],
-                isInhalerCombination: true,
-              },
-            ];
+          try {
+            const singleMatch = textToAnalyze.match(singleInhalerPattern);
+            if (singleMatch) {
+              const value = parseFloat(singleMatch[1] || singleMatch[2]);
+              console.log("Extracted single inhaler value:", value);
+              return [
+                {
+                  original: singleMatch[0],
+                  values: [value],
+                  units: ["microg"],
+                  isCombination: false,
+                  combinationType: "single",
+                  fullMatch: singleMatch[0],
+                  isInhalerCombination: true,
+                },
+              ];
+            }
+          } catch (error) {
+            console.error("Error matching single inhaler pattern:", error);
+          }
+        }
+
+        // Special handling for bracketed format with triple components
+        if (medicationString.includes("[")) {
+          const bracketContent = medicationString.match(/\[(.*?)\]/);
+          if (bracketContent && bracketContent[1]) {
+            const content = bracketContent[1];
+            // Try to find n/n/n pattern in bracket content
+            const triplePattern =
+              /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*(?:microg|mcg|μg|ug)/i;
+            const bracketTripleMatch = content.match(triplePattern);
+
+            if (bracketTripleMatch) {
+              console.log(
+                "Found triple component pattern in brackets:",
+                bracketTripleMatch
+              );
+              return [
+                {
+                  original: bracketContent[0],
+                  values: [
+                    parseFloat(bracketTripleMatch[1]),
+                    parseFloat(bracketTripleMatch[2]),
+                    parseFloat(bracketTripleMatch[3]),
+                  ],
+                  units: ["microg", "microg", "microg"], // Common units for inhalers
+                  isCombination: true,
+                  combinationType: "triple",
+                  fullMatch: bracketContent[0],
+                  isInhalerCombination: true,
+                },
+              ];
+            }
           }
         }
 
@@ -5729,9 +6145,181 @@
             ];
           }
         }
+        // ----- MOLAR UNIT HANDLING -----
+        // General pattern for molar units that doesn't rely on electrolyte names
+        const molarMeasurementPattern =
+          /(\d+(?:\.\d+)?)\s*(mmol|mol|micromol|µmol|umol)\b/i;
+
+        // Try to find molar units anywhere in the string
+        const molarMatches = Array.from(
+          medicationString.matchAll(new RegExp(molarMeasurementPattern, "gi"))
+        );
+
+        if (molarMatches && molarMatches.length > 0) {
+          // Get the first match (most likely to be the main strength)
+          const match = molarMatches[0];
+          console.log("Found molar unit strength:", match[0]);
+
+          // Ensure this is a standalone number and not part of a product name
+          if (isStandaloneNumber(medicationString, match[1])) {
+            return [
+              {
+                original: match[0],
+                values: [parseFloat(match[1])],
+                units: [match[2].toLowerCase()],
+                isCombination: false,
+                combinationType: "single",
+                fullMatch: match[0],
+                hasMolarUnit: true,
+              },
+            ];
+          }
+        }
 
         // ----- GENERAL MEDICATION STRENGTH EXTRACTION -----
+        function inferUnitsFromMedication(standardName, medicationString) {
+          const lowerMed = medicationString.toLowerCase();
 
+          // Most respiratory inhalers use micrograms
+          if (
+            lowerMed.includes("inhaler") ||
+            lowerMed.includes("turbohaler") ||
+            lowerMed.includes("accuhaler") ||
+            lowerMed.includes("evohaler") ||
+            lowerMed.includes("symbicort") ||
+            lowerMed.includes("fostair") ||
+            lowerMed.includes("seretide") ||
+            lowerMed.includes("flutiform") ||
+            lowerMed.includes("trimbow") ||
+            lowerMed.includes("trelegy") ||
+            lowerMed.includes("anoro") ||
+            lowerMed.includes("relvar") ||
+            lowerMed.includes("budesonide") ||
+            lowerMed.includes("formoterol") ||
+            lowerMed.includes("fluticasone") ||
+            lowerMed.includes("salmeterol") ||
+            lowerMed.includes("vilanterol") ||
+            lowerMed.includes("beclometasone") ||
+            lowerMed.includes("beclomethasone")
+          ) {
+            // Check if this is a triple combination
+            if (standardName.split("/").length === 3) {
+              return ["microg", "microg", "microg"];
+            }
+
+            // Check if this is a double combination
+            if (standardName.split("/").length === 2) {
+              return ["microg", "microg"];
+            }
+          }
+
+          // Look in the medication string for unit mentions
+          const unitMatches = lowerMed.match(/microgram|microg|mcg|μg|mg/g);
+          if (unitMatches && unitMatches.length > 0) {
+            const unit = unitMatches[0]
+              .replace("μg", "microg")
+              .replace("mcg", "microg");
+
+            // Return appropriate number of units based on component count
+            const componentCount = standardName.split("/").length;
+            return Array(componentCount).fill(unit);
+          }
+
+          // Default: just return appropriate number of empty strings
+          const componentCount = standardName.split("/").length;
+          return Array(componentCount).fill("");
+        }
+
+        // New helper function to detect combination medications
+        function detectCombinationMedication(medicationString) {
+          const lowerMed = medicationString.toLowerCase();
+
+          // Specific check for common inhaler patterns with numbers
+          const inhalerPattern = /(\d+)\s*\/\s*(\d+)(?:\s*\/\s*(\d+))?/;
+          const inhalerMatch = lowerMed.match(inhalerPattern);
+
+          if (inhalerMatch) {
+            // If we found number patterns like 100/6 or 100/6/25
+            // Try to determine which medication this is by checking for keys or brand names
+            for (const [standardName, aliases] of Object.entries(
+              medicationDict.medications
+            )) {
+              // Only consider combinations
+              if (!standardName.includes("/")) continue;
+
+              // Check if any aliases match in the string
+              if (
+                aliases.some((alias) =>
+                  lowerMed.includes(alias.toLowerCase())
+                ) ||
+                lowerMed.includes(standardName.toLowerCase())
+              ) {
+                return {
+                  standardName,
+                  componentCount: standardName.split("/").length,
+                };
+              }
+            }
+
+            // If we have a number pattern but couldn't identify the medication,
+            // return a default based on the pattern
+            return {
+              standardName: inhalerMatch[3]
+                ? "triple_combination"
+                : "double_combination",
+              componentCount: inhalerMatch[3] ? 3 : 2,
+            };
+          }
+
+          // Check for brand names
+          for (const [standardName, aliases] of Object.entries(
+            medicationDict.medications
+          )) {
+            // Only process combination medications (those with '/' in the name)
+            if (!standardName.includes("/")) continue;
+
+            // Check if the medication string contains the standard name
+            if (lowerMed.includes(standardName.toLowerCase())) {
+              return {
+                standardName,
+                componentCount: standardName.split("/").length,
+              };
+            }
+
+            // Check aliases
+            for (const alias of aliases) {
+              if (lowerMed.includes(alias.toLowerCase())) {
+                return {
+                  standardName,
+                  componentCount: standardName.split("/").length,
+                };
+              }
+            }
+          }
+
+          // Check for components being mentioned together
+          for (const [standardName, aliases] of Object.entries(
+            medicationDict.medications
+          )) {
+            // Only process combination medications
+            if (!standardName.includes("/")) continue;
+
+            // Get the components of this combination
+            const components = standardName.split("/");
+            const componentCount = components.length;
+
+            // Check if ALL components are in the medication string
+            const allComponentsPresent = components.every((component) =>
+              lowerMed.includes(component.toLowerCase())
+            );
+
+            if (allComponentsPresent) {
+              return { standardName, componentCount };
+            }
+          }
+
+          return null;
+        }
         function isStandaloneNumber(text, numberMatch) {
           const index = text.indexOf(numberMatch);
           if (index === -1) return false;
@@ -5874,14 +6462,21 @@
         }
 
         const unitsVariants = `(?:${millionUnitVariants})|unit|units?|u|iu|i\\.u\\.|international\\s*units?|i\\s*units?`;
+
         const massUnitPattern = `mg|mcg|g\\b|microgram|micrograms|milligram|milligrams|gram|grams|${unitsVariants}|μg|ug`;
+
+        // Add this new pattern for molar units
+        const molarUnitPattern = `mmol|micromol|µmol|umol|mol|millimol|millimole|millimoles|micromole|micromoles|mole|moles`;
+
         const volumeUnitPattern =
           "ml|mL|ML|millilitre|milliliter|l|L|litre|liter";
+
         const percentageUnitPattern = "%|percent|percentage";
 
         const numberPattern = "([0-9]+(?:,[0-9]+)*(?:\\.[0-9]*)?|\\.[0-9]+)";
-        const numberWithUnits = `${numberPattern}\\s*(${massUnitPattern})?`;
 
+        // Update the numberWithUnits pattern to include molar units
+        const numberWithUnits = `${numberPattern}\\s*(${massUnitPattern}|${molarUnitPattern}|${volumeUnitPattern}|${percentageUnitPattern})?`;
         const patterns = [
           {
             pattern: new RegExp(
@@ -6101,28 +6696,6 @@
 
         console.log("Final extracted strengths:", strengths);
         return strengths.length > 0 ? strengths : null;
-      }
-
-      // Helper function to build inhaler pattern string
-      function buildInhalerPattern() {
-        const patterns = [];
-        const inhaled = formulationDict.inhaled.priority_groups;
-
-        Object.values(inhaled.specific_devices.terms).forEach((terms) => {
-          patterns.push(...terms);
-        });
-
-        Object.values(inhaled.device_types.terms).forEach((terms) => {
-          patterns.push(...terms);
-        });
-
-        patterns.push(...inhaled.generic_terms.terms);
-        patterns.push("inhaler", "mdi", "pmdi");
-
-        return patterns
-          .map((term) => term.replace(/[-\/\.\(\)]/g, "\\$&"))
-          .sort((a, b) => b.length - a.length)
-          .join("|");
       }
 
       function standardizeStrength(strengthObj) {
@@ -6347,6 +6920,10 @@
         }
       }
       function compareStrengths(med1, med2) {
+        if (isDermolPreparation(med1) || isDermolPreparation(med2)) {
+          console.log("Skipping strength comparison for Dermol preparation");
+          return null; // Return null to indicate comparison should be skipped
+        }
         console.log("\nComparing strengths:", {
           med1,
           med2,
@@ -6717,7 +7294,35 @@
             ? "match"
             : "different";
         }
+        // Special handling for molar units (mmol, mol, micromol)
+        if (
+          strengths1?.[0]?.units?.[0]?.includes("mol") &&
+          strengths2?.[0]?.units?.[0]?.includes("mol")
+        ) {
+          console.log("Comparing molar units:", {
+            value1: strengths1[0].values[0],
+            unit1: strengths1[0].units[0],
+            value2: strengths2[0].values[0],
+            unit2: strengths2[0].units[0],
+          });
 
+          // Standardize both to mmol for comparison
+          const value1 = standardizeUnit(
+            strengths1[0].values[0],
+            strengths1[0].units[0]
+          );
+
+          const value2 = standardizeUnit(
+            strengths2[0].values[0],
+            strengths2[0].units[0]
+          );
+
+          console.log("Standardized molar values:", { value1, value2 });
+
+          if (value1 !== null && value2 !== null) {
+            return Math.abs(value1 - value2) < 0.000001 ? "match" : "different";
+          }
+        }
         // Special handling for inhaler combinations
         if (
           strengths1[0]?.isInhalerCombination ||
@@ -7071,6 +7676,123 @@
 
         return standardNumerator / standardDenominator;
       }
+      function findMedicationMatchForBracketedFormats(
+        medicationString,
+        format
+      ) {
+        // Check if this is one of the formats that often contains bracketed medication names
+        const isBracketedFormat = ["HMT", "CURRENT_MEDS", "DISCHARGE"].includes(
+          format
+        );
+
+        if (!isBracketedFormat) {
+          // For non-bracketed formats, use the regular matching function
+          return findMedicationMatch(medicationString);
+        }
+
+        console.log(
+          `Processing ${format} format medication: "${medicationString}"`
+        );
+
+        // Try to find medication name after the first opening bracket
+        const openParenIndex = medicationString.indexOf("(");
+        const openBracketIndex = medicationString.indexOf("[");
+        let bracketContent = null;
+        let wholeMedication = medicationString;
+
+        // Check which bracket comes first (if any)
+        if (
+          openParenIndex >= 0 &&
+          (openBracketIndex < 0 || openParenIndex < openBracketIndex)
+        ) {
+          // Find matching closing parenthesis
+          let depth = 1;
+          let closeIndex = -1;
+
+          for (let i = openParenIndex + 1; i < medicationString.length; i++) {
+            if (medicationString[i] === "(") depth++;
+            if (medicationString[i] === ")") depth--;
+
+            if (depth === 0) {
+              closeIndex = i;
+              break;
+            }
+          }
+
+          if (closeIndex > openParenIndex) {
+            bracketContent = medicationString
+              .substring(openParenIndex + 1, closeIndex)
+              .trim();
+            console.log(`Found content in parentheses: "${bracketContent}"`);
+          }
+        } else if (openBracketIndex >= 0) {
+          // Find matching closing square bracket
+          let depth = 1;
+          let closeIndex = -1;
+
+          for (let i = openBracketIndex + 1; i < medicationString.length; i++) {
+            if (medicationString[i] === "[") depth++;
+            if (medicationString[i] === "]") depth--;
+
+            if (depth === 0) {
+              closeIndex = i;
+              break;
+            }
+          }
+
+          if (closeIndex > openBracketIndex) {
+            bracketContent = medicationString
+              .substring(openBracketIndex + 1, closeIndex)
+              .trim();
+            console.log(
+              `Found content in square brackets: "${bracketContent}"`
+            );
+          }
+        }
+
+        // Strategy 1: Try to match the content inside brackets if available
+        if (bracketContent) {
+          const bracketMatch = findMedicationMatch(bracketContent);
+          if (bracketMatch !== "unknown medication") {
+            console.log(`Found match from bracket content: "${bracketMatch}"`);
+            return bracketMatch;
+          }
+        }
+
+        // Strategy 2: Try to match the whole medication string
+        const wholeMatch = findMedicationMatch(wholeMedication);
+        if (wholeMatch !== "unknown medication") {
+          console.log(
+            `Found match from whole medication string: "${wholeMatch}"`
+          );
+          return wholeMatch;
+        }
+
+        // Strategy 3: If brackets were found but matching failed, try the part before brackets
+        if (openParenIndex > 0 || openBracketIndex > 0) {
+          const startIndex = Math.min(
+            openParenIndex >= 0 ? openParenIndex : medicationString.length,
+            openBracketIndex >= 0 ? openBracketIndex : medicationString.length
+          );
+
+          const textBeforeBracket = medicationString
+            .substring(0, startIndex)
+            .trim();
+          if (textBeforeBracket) {
+            const beforeBracketMatch = findMedicationMatch(textBeforeBracket);
+            if (beforeBracketMatch !== "unknown medication") {
+              console.log(
+                `Found match from text before bracket: "${beforeBracketMatch}"`
+              );
+              return beforeBracketMatch;
+            }
+          }
+        }
+
+        // No match found
+        console.log("No medication match found");
+        return "unknown medication";
+      }
       function compareMedicationLists() {
         // Get tables and their formats
         const table1Container = document.getElementById("table1Container");
@@ -7086,7 +7808,7 @@
         }
 
         // Get medications from both tables
-        const getMedicationsFromTable = (table) => {
+        const getMedicationsFromTable = (table, format) => {
           const meds = [];
           const rows = table.querySelectorAll("tbody tr");
           rows.forEach((row, index) => {
@@ -7096,7 +7818,11 @@
               const instructions = cells[2]?.textContent.trim() || "";
               const comments = cells[3]?.textContent.trim() || "";
 
-              const standardizedName = findMedicationMatch(medName);
+              // Use the new matching function with format information
+              const standardizedName = findMedicationMatchForBracketedFormats(
+                medName,
+                format
+              );
 
               meds.push({
                 original: medName,
@@ -7112,8 +7838,8 @@
           return meds;
         };
 
-        const list1Meds = getMedicationsFromTable(table1);
-        const list2Meds = getMedicationsFromTable(table2);
+        const list1Meds = getMedicationsFromTable(table1, format1);
+        const list2Meds = getMedicationsFromTable(table2, format2);
 
         // Initialize comparison results
         const matches = [];
@@ -7354,161 +8080,161 @@
         };
 
         let html = `
-        <h2>Medication Comparison Results</h2>
-        
-        <h3>Matching Medications (${matches.length} entries)</h3>
-        <table class="data-table comparison-table">
-            <thead>
-                <tr>
-                    <th>Include</th>
-                    <th>Standard Medication Name</th>
-                    <th>${list1Header}</th>
-                    <th>${list2Header}</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${Object.entries(matchedMedications)
-                  .sort(sortMedications)
-                  .map(([standardName, meds]) => {
-                    return meds.pairings
-                      .map(
-                        (pair, index) => `
-                            ${
-                              index === 0
-                                ? `
-                                <tr class="medication-group">
-                                    <td rowspan="${meds.pairings.length}">
-                                        <input type="checkbox" class="report-select" data-type="match">
-                                    </td>
-                                    <td rowspan="${meds.pairings.length}">${standardName}</td>
-                            `
-                                : '<tr class="medication-subrow">'
-                            }
-                                    <td>${
-                                      pair.list1
-                                        ? formatMedicationDetails(
-                                            pair.list1,
-                                            pair.list2
-                                          )
-                                        : "—"
-                                    }</td>
-                                    <td>${
-                                      pair.list2
-                                        ? formatMedicationDetails(
-                                            pair.list2,
-                                            pair.list1
-                                          )
-                                        : "—"
-                                    }</td>
-                                </tr>
-                        `
-                      )
-                      .join("");
-                  })
-                  .join("")}
-            </tbody>
-        </table>
+              <h2>Medication Comparison Results</h2>
 
-        <h3>Medications Only in ${list1Header} (${
+              <h3>Matching Medications (${matches.length} entries)</h3>
+              <table class="data-table comparison-table">
+                  <thead>
+                      <tr>
+                          <th>Include</th>
+                          <th>Standard Medication Name</th>
+                          <th>${list1Header}</th>
+                          <th>${list2Header}</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      ${Object.entries(matchedMedications)
+                        .sort(sortMedications)
+                        .map(([standardName, meds]) => {
+                          return meds.pairings
+                            .map(
+                              (pair, index) => `
+                                  ${
+                                    index === 0
+                                      ? `
+                                      <tr class="medication-group">
+                                          <td rowspan="${meds.pairings.length}">
+                                              <input type="checkbox" class="report-select" data-type="match">
+                                          </td>
+                                          <td rowspan="${meds.pairings.length}">${standardName}</td>
+                                  `
+                                      : '<tr class="medication-subrow">'
+                                  }
+                                          <td>${
+                                            pair.list1
+                                              ? formatMedicationDetails(
+                                                  pair.list1,
+                                                  pair.list2
+                                                )
+                                              : "—"
+                                          }</td>
+                                          <td>${
+                                            pair.list2
+                                              ? formatMedicationDetails(
+                                                  pair.list2,
+                                                  pair.list1
+                                                )
+                                              : "—"
+                                          }</td>
+                                      </tr>
+                              `
+                            )
+                            .join("");
+                        })
+                        .join("")}
+                  </tbody>
+              </table>
+
+              <h3>Medications Only in ${list1Header} (${
           onlyInList1.length
         } entries)</h3>
-        <table class="data-table comparison-table">
-            <thead>
-                <tr>
-                    <th>Include</th>
-                    <th>Standard Medication Name</th>
-                    <th>Full Medication Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${Object.entries(
-                  onlyInList1.reduce((groups, med) => {
-                    const standardName =
-                      med.standardized || "unknown medication";
-                    if (!groups[standardName]) groups[standardName] = [];
-                    groups[standardName].push(med);
-                    return groups;
-                  }, {})
-                )
-                  .sort(sortMedications)
-                  .map(
-                    ([standardName, meds]) => `
-                    <tr class="medication-group">
-                        <td rowspan="${meds.length}">
-                            <input type="checkbox" class="report-select" data-type="list1" checked>
-                        </td>
-                        <td rowspan="${meds.length}">${standardName}</td>
-                        <td>${formatMedicationDetails(meds[0])}</td>
-                    </tr>
-                    ${meds
-                      .slice(1)
-                      .map(
-                        (med) => `
-                        <tr class="medication-subrow">
-                            <td>${formatMedicationDetails(med)}</td>
-                        </tr>
-                    `
+              <table class="data-table comparison-table">
+                  <thead>
+                      <tr>
+                          <th>Include</th>
+                          <th>Standard Medication Name</th>
+                          <th>Full Medication Details</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      ${Object.entries(
+                        onlyInList1.reduce((groups, med) => {
+                          const standardName =
+                            med.standardized || "unknown medication";
+                          if (!groups[standardName]) groups[standardName] = [];
+                          groups[standardName].push(med);
+                          return groups;
+                        }, {})
                       )
-                      .join("")}
-                `
-                  )
-                  .join("")}
-            </tbody>
-        </table>
+                        .sort(sortMedications)
+                        .map(
+                          ([standardName, meds]) => `
+                          <tr class="medication-group">
+                              <td rowspan="${meds.length}">
+                                  <input type="checkbox" class="report-select" data-type="list1" checked>
+                              </td>
+                              <td rowspan="${meds.length}">${standardName}</td>
+                              <td>${formatMedicationDetails(meds[0])}</td>
+                          </tr>
+                          ${meds
+                            .slice(1)
+                            .map(
+                              (med) => `
+                              <tr class="medication-subrow">
+                                  <td>${formatMedicationDetails(med)}</td>
+                              </tr>
+                          `
+                            )
+                            .join("")}
+                      `
+                        )
+                        .join("")}
+                  </tbody>
+              </table>
 
-        <h3>Medications Only in ${list2Header} (${
+              <h3>Medications Only in ${list2Header} (${
           onlyInList2.length
         } entries)</h3>
-        <table class="data-table comparison-table">
-            <thead>
-                <tr>
-                    <th>Include</th>
-                    <th>Standard Medication Name</th>
-                    <th>Full Medication Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${Object.entries(
-                  onlyInList2.reduce((groups, med) => {
-                    const standardName =
-                      med.standardized || "unknown medication";
-                    if (!groups[standardName]) groups[standardName] = [];
-                    groups[standardName].push(med);
-                    return groups;
-                  }, {})
-                )
-                  .sort(sortMedications)
-                  .map(
-                    ([standardName, meds]) => `
-                    <tr class="medication-group">
-                        <td rowspan="${meds.length}">
-                            <input type="checkbox" class="report-select" data-type="list2" checked>
-                        </td>
-                        <td rowspan="${meds.length}">${standardName}</td>
-                        <td>${formatMedicationDetails(meds[0])}</td>
-                    </tr>
-                    ${meds
-                      .slice(1)
-                      .map(
-                        (med) => `
-                        <tr class="medication-subrow">
-                            <td>${formatMedicationDetails(med)}</td>
-                        </tr>
-                    `
+              <table class="data-table comparison-table">
+                  <thead>
+                      <tr>
+                          <th>Include</th>
+                          <th>Standard Medication Name</th>
+                          <th>Full Medication Details</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      ${Object.entries(
+                        onlyInList2.reduce((groups, med) => {
+                          const standardName =
+                            med.standardized || "unknown medication";
+                          if (!groups[standardName]) groups[standardName] = [];
+                          groups[standardName].push(med);
+                          return groups;
+                        }, {})
                       )
-                      .join("")}
-                `
-                  )
-                  .join("")}
-            </tbody>
-        </table>
+                        .sort(sortMedications)
+                        .map(
+                          ([standardName, meds]) => `
+                          <tr class="medication-group">
+                              <td rowspan="${meds.length}">
+                                  <input type="checkbox" class="report-select" data-type="list2" checked>
+                              </td>
+                              <td rowspan="${meds.length}">${standardName}</td>
+                              <td>${formatMedicationDetails(meds[0])}</td>
+                          </tr>
+                          ${meds
+                            .slice(1)
+                            .map(
+                              (med) => `
+                              <tr class="medication-subrow">
+                                  <td>${formatMedicationDetails(med)}</td>
+                              </tr>
+                          `
+                            )
+                            .join("")}
+                      `
+                        )
+                        .join("")}
+                  </tbody>
+              </table>
 
-        <div style="text-align: center; margin: 20px;">
-            <button onclick="generateReport()" class="generate-report-btn">
-                Generate Report
-            </button>
-        </div>
-    `;
+              <div style="text-align: center; margin: 20px;">
+                  <button onclick="generateReport()" class="generate-report-btn">
+                      Generate Report
+                  </button>
+              </div>
+          `;
 
         resultsContainer.innerHTML = html;
       }
@@ -7630,18 +8356,18 @@
         if (!med2) {
           // Single medication display - no comparison needed
           return `
-            <div class="medication-detail">
-                <div class="original-name">${highlightFormulationAndStrength(
-                  med1.original
-                )}</div>
-                <div class="instructions">${med1.instructions}</div>
-                ${
-                  med1.comments
-                    ? `<div class="comments">${med1.comments}</div>`
-                    : ""
-                }
-            </div>
-        `;
+                  <div class="medication-detail">
+                      <div class="original-name">${highlightFormulationAndStrength(
+                        med1.original
+                      )}</div>
+                      <div class="instructions">${med1.instructions}</div>
+                      ${
+                        med1.comments
+                          ? `<div class="comments">${med1.comments}</div>`
+                          : ""
+                      }
+                  </div>
+              `;
         }
 
         const formulationComparison = compareFormulations(
@@ -7680,27 +8406,223 @@
         }
 
         return `
-        <div class="medication-detail">
-            <div class="original-name">
-                ${highlightFormulationAndStrength(med1.original, med2.original)}
-            </div>
-            <div class="instructions">${med1.instructions}</div>
-            ${
-              med1.comments
-                ? `<div class="comments">${med1.comments}</div>`
-                : ""
-            }
-        </div>
-    `;
+              <div class="medication-detail">
+                  <div class="original-name">
+                      ${highlightFormulationAndStrength(
+                        med1.original,
+                        med2.original
+                      )}
+                  </div>
+                  <div class="instructions">${med1.instructions}</div>
+                  ${
+                    med1.comments
+                      ? `<div class="comments">${med1.comments}</div>`
+                      : ""
+                  }
+              </div>
+          `;
+      }
+      function isCarbomerPreparation(medicationString) {
+        if (!medicationString) return false;
+
+        const lowerMed = medicationString.toLowerCase();
+        return lowerMed.includes("carbomer");
+      }
+      function isDermolPreparation(medicationString) {
+        if (!medicationString) return false;
+
+        const lowerMed = medicationString.toLowerCase();
+        return lowerMed.includes("dermol");
       }
 
       function highlightFormulationAndStrength(text, comparisonMed) {
+        console.log("\n=== highlightFormulationAndStrength START ===");
+        console.log("Input text:", text);
+        console.log("Comparison med:", comparisonMed);
+
         let result = highlightFormulationTerms(text, comparisonMed);
+        console.log("After formulation highlighting:", result);
 
         if (comparisonMed) {
           const strengthComparison = compareStrengths(text, comparisonMed);
           const strengths = extractStrength(text);
 
+          console.log("Strength comparison result:", strengthComparison);
+          console.log("Extracted strengths:", strengths);
+
+          // Check if this is a Carbomer preparation
+          const isCarbomer = isCarbomerPreparation(text);
+          console.log("Is Carbomer:", isCarbomer);
+
+          // For Carbomer preparations, we'll use a special approach
+          if (isCarbomer) {
+            console.log("🔧 Processing as Carbomer preparation");
+            // Clear result of any previous highlighting
+            result = highlightFormulationTerms(text, comparisonMed);
+
+            // Only highlight percentage values for carbomer preparations
+            const percentagePattern = new RegExp(
+              `(\\d+(?:\\.\\d+)?\\s*%)`,
+              "gi"
+            );
+
+            let className =
+              strengthComparison === "match"
+                ? "strength-match"
+                : strengthComparison === "similar"
+                ? "strength-similar"
+                : strengthComparison === "different"
+                ? "strength-different"
+                : "strength-term";
+
+            // Replace percentage values with highlighted versions
+            result = result.replace(percentagePattern, (match) => {
+              console.log("Highlighting Carbomer percentage:", match);
+              return `<span class="${className}">${match}</span>`;
+            });
+
+            console.log("🚀 CARBOMER PROCESSING COMPLETE - RETURNING EARLY");
+            console.log("Final Carbomer result:", result);
+            console.log(
+              "=== highlightFormulationAndStrength END (carbomer) ===\n"
+            );
+            // Return early to skip regular strength highlighting
+            return result;
+          }
+
+          // Special handling for eye/ear drops
+          if (/eye\s+drops?/i.test(text) || /ear\s+drops?/i.test(text)) {
+            console.log("👁️ PROCESSING AS EYE/EAR DROPS");
+            console.log("Strengths for eye drops:", JSON.stringify(strengths));
+
+            // Clear result of any previous highlighting
+            result = highlightFormulationTerms(text, comparisonMed);
+            console.log(
+              "Result after clearing formulation highlighting:",
+              result
+            );
+
+            let className =
+              strengthComparison === "match"
+                ? "strength-match"
+                : strengthComparison === "similar"
+                ? "strength-similar"
+                : strengthComparison === "different"
+                ? "strength-different"
+                : "strength-term";
+
+            console.log("CSS class to apply:", className);
+
+            // 1. Highlight percentage values for eye/ear drops
+            const percentagePattern = /(\d+(?:\.\d+)?\s*%)/g;
+            console.log("Eye drops percentage pattern:", percentagePattern);
+
+            const beforePercentReplace = result;
+            result = result.replace(percentagePattern, (match) => {
+              console.log("Replacing eye drops percentage match:", match);
+              return `<span class="${className}">${match}</span>`;
+            });
+            console.log(
+              "Result before percentage replace:",
+              beforePercentReplace
+            );
+            console.log("Result after percentage replace:", result);
+
+            // 2. Highlight explicit concentration expressions like mg/ml
+            const concentrationPattern =
+              /(\d+(?:\.\d+)?\s*(?:mg|mcg|g)\s*\/\s*(?:ml|mL))/gi;
+            console.log("Concentration pattern:", concentrationPattern);
+
+            const beforeConcReplace = result;
+            result = result.replace(concentrationPattern, (match) => {
+              console.log("Replacing concentration match:", match);
+              return `<span class="${className}">${match}</span>`;
+            });
+            console.log(
+              "Result before concentration replace:",
+              beforeConcReplace
+            );
+            console.log("Result after concentration replace:", result);
+
+            // 3. NEW: Also highlight implicit concentrations (simple mass values)
+            const massPattern =
+              /(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|microgram|micrograms))\b/gi;
+            console.log("Mass pattern:", massPattern);
+
+            const beforeMassReplace = result;
+            result = result.replace(massPattern, (match) => {
+              console.log("Replacing mass match:", match);
+              return `<span class="${className}">${match}</span>`;
+            });
+            console.log("Result before mass replace:", beforeMassReplace);
+            console.log("Result after mass replace:", result);
+
+            console.log("🚀 EYE DROPS PROCESSING COMPLETE - RETURNING EARLY");
+            console.log("Final result for eye drops:", result);
+            console.log(
+              "=== highlightFormulationAndStrength END (eye drops) ===\n"
+            );
+
+            // Return early to skip the rest of the function
+            return result;
+          }
+
+          console.log(
+            "⚠️ CONTINUING TO GENERAL PROCESSING (not eye/ear drops or carbomer)"
+          );
+
+          // Add null check before accessing strengths[0]
+          if (
+            strengths &&
+            strengths.length > 0 &&
+            strengths[0] &&
+            strengths[0].isCombination &&
+            strengths[0].values
+          ) {
+            console.log("🔄 Processing combination medication");
+            // Define className first
+            let className =
+              strengthComparison === "match"
+                ? "strength-match"
+                : strengthComparison === "similar"
+                ? "strength-similar"
+                : strengthComparison === "different"
+                ? "strength-different"
+                : "strength-term";
+
+            // For each component in the combination
+            strengths[0].values.forEach((value, index) => {
+              console.log(
+                `Processing combination component ${index}: value=${value}`
+              );
+              // Get its unit (if available)
+              const unit = strengths[0].units?.[index] || "";
+              console.log(`Unit for component ${index}: ${unit}`);
+
+              // Create a pattern that searches for this exact value + unit
+              // This more precise approach helps with comma-separated formats
+              const valueString = value.toString();
+              const valuePattern = new RegExp(
+                `(\\b${escapeRegExp(valueString)}\\s*${escapeRegExp(unit)}\\b)`,
+                "g"
+              );
+              console.log(`Pattern for component ${index}:`, valuePattern);
+
+              // Apply highlighting to this specific component
+              const beforeReplace = result;
+              result = result.replace(
+                valuePattern,
+                `<span class="${className}">$1</span>`
+              );
+              console.log(
+                `Result before component ${index} replace:`,
+                beforeReplace
+              );
+              console.log(`Result after component ${index} replace:`, result);
+            });
+          }
+
+          // For all other medications, continue with the normal highlighting process
           const packSizePatterns = [
             /\(\d+\s*(?:PK|Pack|Packs?)\)/i,
             /\d+\s*(?:PK|Pack|Packs?)\b/i,
@@ -7727,12 +8649,32 @@
             /\s\d+\s*(?:m)?[Gg][\.\)]\)$/i, // Matches end patterns like " 100 G.))"
             /(?:Cream|Gel|Ointment)\s+\d+\s*(?:m)?[Gg][\.\)]\]$/i, // Matches "Cream 100 G.]"
             /(?:Cream|Gel|Ointment)\s+\d+\s*(?:m)?[Gg][\.\)]\)$/i, // Matches "Cream 100 G.)"
+            /\[\S*\s+\d+\s*(?:ml|mL|ML|g|G)\]/i, // Match [text 10 ML]
+            /\[\S*\s+\d+\s*(?:ml|mL|ML|g|G)\s*\]/i, // With optional space before closing bracket
+            /\s\d+\s*(?:ml|mL|ML|g|G)\s*\]/i, // Match any ending with e.g., " 10 ML]"
+            /\d+\s*(?:ml|mL|ML|g|G)\s*\]$/i, // Match specifically at the end of string
+            /\[\S*\s+\d+\s*(?:ml|mL|ML)\s*\]/gi, // [text 10 ML]
+            /\[\S*\s+\d+\s*(?:ml|mL|ML)\]/gi, // [text 10ML]
+            /\]\s*\d+\s*(?:ml|mL|ML)/gi, // ] 10 ML
+            /\d+\s*(?:ml|mL|ML)\s*\]/gi, // 10 ML]
+            /Drops?\s+\d+\s*(?:ml|mL|ML)\b/i, // Match "Drops 10 ML"
+            /\b\d+\s*(?:ml|mL|ML)\b(?!\s*\/)/i, // Match standalone "10 ML" not followed by "/"
+            /Eye\s+Drops\s+\d+\s*(?:ml|mL|ML)/gi, // Match "Eye Drops 10 ML"
+            /Ear\s+Drops\s+\d+\s*(?:ml|mL|ML)/gi, // Match "Ear Drops 10 ML"
           ];
 
+          console.log(
+            "📦 Pack size patterns loaded, count:",
+            packSizePatterns.length
+          );
+
           if (text.toLowerCase().includes("insulin")) {
+            console.log("💉 Processing insulin medication");
             const insulinPattern =
               /(\d+)\s*(?:unit|units?|u|iu)s?\s*\/\s*(?:ml|mL)\s*(?!\d)/i;
             const match = text.match(insulinPattern);
+            console.log("Insulin pattern match:", match);
+
             if (match) {
               let className =
                 strengthComparison === "match"
@@ -7744,11 +8686,24 @@
                   : "strength-term";
 
               const replaceRegex = new RegExp(escapeRegExp(match[1]), "g");
+              console.log("Insulin replace regex:", replaceRegex);
+
+              const beforeInsulinReplace = result;
               result = result.replace(
                 replaceRegex,
                 `<span class="${className}">${match[0]}</span>`
               );
+              console.log(
+                "Result before insulin replace:",
+                beforeInsulinReplace
+              );
+              console.log("Result after insulin replace:", result);
             }
+            console.log("🚀 INSULIN PROCESSING COMPLETE - RETURNING EARLY");
+            console.log("Final insulin result:", result);
+            console.log(
+              "=== highlightFormulationAndStrength END (insulin) ===\n"
+            );
             return result;
           }
 
@@ -7760,17 +8715,69 @@
             "unit|units|u\\b|iu|ml|mL|ML|millilitre|milliliter|l|L|litre|liter|" +
             "million\\s*unit|million\\s*units|mega\\s*unit|mega\\s*units|mu|m\\s*unit|m\\s*units)s?";
 
+          console.log("📊 General patterns defined");
+          console.log("Number pattern:", numberPattern);
+          console.log("Units pattern:", unitsPattern);
+
           // Separate pattern for percentages
           const percentagePattern = new RegExp(
             `(${numberPattern}\\s*%)(?!\\s*(?:PK|pk|Pk|pK|Pack|Packs?)\\b|\\s*\\])`,
             "gi"
           );
 
+          console.log("General percentage pattern:", percentagePattern);
+
+          // Add this new section for molar units - this should come before other patterns
+          if (
+            strengths &&
+            strengths.length > 0 &&
+            strengths[0] &&
+            strengths[0].hasMolarUnit
+          ) {
+            console.log("🧪 Processing molar unit medication");
+            // Get the class based on comparison result
+            const className =
+              strengthComparison === "match"
+                ? "strength-match"
+                : strengthComparison === "similar"
+                ? "strength-similar"
+                : strengthComparison === "different"
+                ? "strength-different"
+                : "strength-term";
+
+            // Create pattern to match the entire strength including unit
+            const molarPattern = new RegExp(
+              `(\\d+(?:\\.\\d+)?)\\s*(?:mmol|mol|micromol|µmol|umol)\\b`,
+              "gi"
+            );
+
+            console.log("Molar pattern:", molarPattern);
+
+            // Replace all occurrences
+            const beforeMolarReplace = result;
+            result = result.replace(molarPattern, (match) => {
+              console.log("Replacing molar match:", match);
+              return `<span class="${className}">${match}</span>`;
+            });
+            console.log("Result before molar replace:", beforeMolarReplace);
+            console.log("Result after molar replace:", result);
+
+            console.log("🚀 MOLAR PROCESSING COMPLETE - RETURNING EARLY");
+            console.log("Final molar result:", result);
+            console.log(
+              "=== highlightFormulationAndStrength END (molar) ===\n"
+            );
+            // After handling molar units, return the result
+            return result;
+          }
+
           // Pattern for million/mega units
           const millionUnitPattern = new RegExp(
             `(${millionPattern}\\s*(?:unit|units|u|iu)s?)(?!\\s*(?:PK|pk|Pk|pK|Pack|Packs?)\\b)`,
             "gi"
           );
+
+          console.log("Million unit pattern:", millionUnitPattern);
 
           const strengthPatterns = [
             // Million unit pattern (highest priority)
@@ -7797,6 +8804,11 @@
             ),
           ];
 
+          console.log(
+            "📝 Strength patterns defined, count:",
+            strengthPatterns.length
+          );
+
           let className =
             strengthComparison === "match"
               ? "strength-match"
@@ -7806,24 +8818,36 @@
               ? "strength-different"
               : "strength-term";
 
+          console.log("Final CSS class:", className);
+
           // Handle percentage matches first
           const percentMatches = Array.from(text.matchAll(percentagePattern));
+          console.log("Percentage matches found:", percentMatches.length);
+
           for (const match of percentMatches) {
+            console.log("Processing percentage match:", match);
             if (isStandaloneNumber(text, match[1].replace("%", ""))) {
+              console.log("Percentage match is standalone, applying highlight");
               const replaceRegex = new RegExp(escapeRegExp(match[1]), "g");
+              const beforeReplace = result;
               result = result.replace(
                 replaceRegex,
                 `<span class="${className}">${match[1]}</span>`
               );
+              console.log("Result before percentage replace:", beforeReplace);
+              console.log("Result after percentage replace:", result);
+            } else {
+              console.log("Percentage match is not standalone, skipping");
             }
           }
 
-          // NEW SECTION: Special handling for matches with units
+          // Special handling for matches with units
           if (
             strengthComparison === "match" &&
             strengths &&
             strengths.length > 0
           ) {
+            console.log("🎯 Special handling for exact matches with units");
             // Look for numbers followed by optional units
             const strengthWithUnitPattern = new RegExp(
               `\\b(${numberPattern})\\s*(${unitsPattern})?\\b`,
@@ -7833,23 +8857,36 @@
               text.matchAll(strengthWithUnitPattern)
             );
 
+            console.log("Strength with unit matches:", fullMatches.length);
+
             for (const match of fullMatches) {
+              console.log("Processing strength with unit match:", match);
               // Skip if this is likely a pack size
               let isPackSize = false;
               const context = text.substr(
                 Math.max(0, match.index - 10),
                 match[0].length + 20
               );
+              console.log("Match context:", context);
+
               for (const packPattern of packSizePatterns) {
                 if (packPattern.test(context)) {
+                  console.log(
+                    "Match identified as pack size by pattern:",
+                    packPattern
+                  );
                   isPackSize = true;
                   break;
                 }
               }
-              if (isPackSize) continue;
+              if (isPackSize) {
+                console.log("Skipping pack size match");
+                continue;
+              }
 
               // Convert to number for comparison
               const numberValue = parseFloat(match[1].replace(/,/g, ""));
+              console.log("Number value for comparison:", numberValue);
 
               // Check if this number matches the extracted strength value
               if (
@@ -7859,30 +8896,52 @@
                   (val) => Math.abs(parseFloat(val) - numberValue) < 0.001
                 )
               ) {
+                console.log("Number matches extracted strength value");
                 // This number matches our strength value - apply highlighting to full match (number + unit)
                 const fullMatchText = match[0]; // This includes both the number and unit
                 const replaceRegex = new RegExp(
                   escapeRegExp(fullMatchText),
                   "g"
                 );
+                const beforeReplace = result;
                 result = result.replace(
                   replaceRegex,
                   `<span class="${className}">${fullMatchText}</span>`
                 );
+                console.log(
+                  "Result before strength match replace:",
+                  beforeReplace
+                );
+                console.log("Result after strength match replace:", result);
+              } else {
+                console.log("Number does not match extracted strength values");
               }
             }
           }
 
           // Handle other strength patterns
-          strengthPatterns.forEach((pattern) => {
+          console.log("🔍 Processing other strength patterns");
+          strengthPatterns.forEach((pattern, patternIndex) => {
+            console.log(`Processing pattern ${patternIndex}:`, pattern);
             const matches = text.matchAll(pattern);
+            let matchCount = 0;
+
             for (const match of matches) {
+              matchCount++;
+              console.log(
+                `Pattern ${patternIndex}, match ${matchCount}:`,
+                match
+              );
+
               if (isStandaloneNumber(text, match[1])) {
+                console.log("Match is standalone number");
                 let isExcluded = false;
                 const matchText = match[0]; // Use the full match text (including units)
                 const matchPosition = text.indexOf(matchText);
 
-                packSizePatterns.forEach((packPattern) => {
+                console.log("Checking against pack size patterns...");
+
+                packSizePatterns.forEach((packPattern, packIndex) => {
                   const packMatches = Array.from(
                     text.matchAll(new RegExp(packPattern, "gi"))
                   );
@@ -7896,6 +8955,10 @@
                       (matchPosition >= packStart && matchPosition < packEnd) ||
                       (packText.includes(matchText) && matchText.match(/^\d+$/))
                     ) {
+                      console.log(
+                        `Match excluded by pack pattern ${packIndex}:`,
+                        packPattern
+                      );
                       isExcluded = true;
                       break;
                     }
@@ -7903,23 +8966,46 @@
                 });
 
                 if (!isExcluded) {
+                  console.log("Match not excluded, applying highlight");
                   const replaceRegex = new RegExp(escapeRegExp(matchText), "g");
+                  const beforeReplace = result;
                   result = result.replace(
                     replaceRegex,
                     `<span class="${className}">${matchText}</span>`
                   );
+                  console.log("Result before pattern replace:", beforeReplace);
+                  console.log("Result after pattern replace:", result);
+                } else {
+                  console.log("Match excluded as pack size");
                 }
+              } else {
+                console.log("Match is not standalone number, skipping");
               }
             }
+            console.log(
+              `Pattern ${patternIndex} processed ${matchCount} matches`
+            );
           });
+
+          console.log("Final result (general processing):", result);
+          console.log(
+            "=== highlightFormulationAndStrength END (general) ===\n"
+          );
+
+          return result;
         }
 
+        console.log("No comparison med - returning basic result");
+        console.log(
+          "=== highlightFormulationAndStrength END (no comparison) ===\n"
+        );
         return result;
       }
 
-      // Helper function to escape special regex characters
       function escapeRegExp(string) {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const escaped = string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        console.log(`escapeRegExp: "${string}" -> "${escaped}"`);
+        return escaped;
       }
 
       function generateReport() {
@@ -8079,129 +9165,129 @@
         }, {});
 
         const html = `
-    ${
-      Object.keys(groupedMatchingMeds).length > 0
-        ? `
-        <table class="data-table report-table">
-            <thead>
-                <tr>
-                    <th>Medication in Both Lists</th>
-                    <th>${list1Header}</th>
-                    <th>${list2Header}</th>
-                    <th>Comments</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${Object.entries(groupedMatchingMeds)
-                  .map(([standardName, meds]) =>
-                    meds
-                      .map(
-                        (med, index) => `
-                        <tr>
-                            <td>${index === 0 ? standardName : ""}</td>
-                            <td>${
-                              med.list1Details
-                                ? formatReportMedication(med.list1Details)
-                                : "—"
-                            }</td>
-                            <td>${
-                              med.list2Details
-                                ? formatReportMedication(med.list2Details)
-                                : "—"
-                            }</td>
-                            <td contenteditable="true" class="comments-cell">—</td>
-                        </tr>
-                    `
-                      )
-                      .join("")
-                  )
-                  .join("")}
-            </tbody>
-        </table>
-    `
-        : ""
-    }
+          ${
+            Object.keys(groupedMatchingMeds).length > 0
+              ? `
+              <table class="data-table report-table">
+                  <thead>
+                      <tr>
+                          <th>Medication in Both Lists</th>
+                          <th>${list1Header}</th>
+                          <th>${list2Header}</th>
+                          <th>Comments</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      ${Object.entries(groupedMatchingMeds)
+                        .map(([standardName, meds]) =>
+                          meds
+                            .map(
+                              (med, index) => `
+                              <tr>
+                                  <td>${index === 0 ? standardName : ""}</td>
+                                  <td>${
+                                    med.list1Details
+                                      ? formatReportMedication(med.list1Details)
+                                      : "—"
+                                  }</td>
+                                  <td>${
+                                    med.list2Details
+                                      ? formatReportMedication(med.list2Details)
+                                      : "—"
+                                  }</td>
+                                  <td contenteditable="true" class="comments-cell">—</td>
+                              </tr>
+                          `
+                            )
+                            .join("")
+                        )
+                        .join("")}
+                  </tbody>
+              </table>
+          `
+              : ""
+          }
 
-       ${
-         Object.keys(groupedDiscontinuedMeds).length > 0
-           ? `
-           <table class="data-table report-table">
-               <thead>
-                   <tr>
-                       <th>Discontinued Medication</th>
-                       <th>Details</th>
-                       <th>Comments</th>
-                   </tr>
-               </thead>
-               <tbody>
-                   ${Object.entries(groupedDiscontinuedMeds)
-                     .map(([standardName, meds]) =>
-                       meds
-                         .map(
-                           (med, index) => `
-                           <tr>
-                               <td>${index === 0 ? standardName : ""}</td>
-                               <td>${
-                                 med.details
-                                   ? formatReportMedication(med.details)
-                                   : "—"
-                               }</td>
-                               <td contenteditable="true" class="comments-cell">—</td>
-                           </tr>
-                       `
-                         )
-                         .join("")
-                     )
-                     .join("")}
-               </tbody>
-           </table>
-       `
-           : ""
-       }
+             ${
+               Object.keys(groupedDiscontinuedMeds).length > 0
+                 ? `
+                 <table class="data-table report-table">
+                     <thead>
+                         <tr>
+                             <th>Discontinued Medication</th>
+                             <th>Details</th>
+                             <th>Comments</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         ${Object.entries(groupedDiscontinuedMeds)
+                           .map(([standardName, meds]) =>
+                             meds
+                               .map(
+                                 (med, index) => `
+                                 <tr>
+                                     <td>${index === 0 ? standardName : ""}</td>
+                                     <td>${
+                                       med.details
+                                         ? formatReportMedication(med.details)
+                                         : "—"
+                                     }</td>
+                                     <td contenteditable="true" class="comments-cell">—</td>
+                                 </tr>
+                             `
+                               )
+                               .join("")
+                           )
+                           .join("")}
+                     </tbody>
+                 </table>
+             `
+                 : ""
+             }
 
-       ${
-         Object.keys(groupedNewMeds).length > 0
-           ? `
-           <table class="data-table report-table">
-               <thead>
-                   <tr>
-                       <th>New Medication</th>
-                       <th>Details</th>
-                       <th>Comments</th>
-                   </tr>
-               </thead>
-               <tbody>
-                   ${Object.entries(groupedNewMeds)
-                     .map(([standardName, meds]) =>
-                       meds
-                         .map(
-                           (med, index) => `
-                           <tr>
-                               <td>${index === 0 ? standardName : ""}</td>
-                               <td>${
-                                 med.details
-                                   ? formatReportMedication(med.details)
-                                   : "—"
-                               }</td>
-                               <td contenteditable="true" class="comments-cell">—</td>
-                           </tr>
-                       `
-                         )
-                         .join("")
-                     )
-                     .join("")}
-               </tbody>
-           </table>
-       `
-           : ""
-       }
+             ${
+               Object.keys(groupedNewMeds).length > 0
+                 ? `
+                 <table class="data-table report-table">
+                     <thead>
+                         <tr>
+                             <th>New Medication</th>
+                             <th>Details</th>
+                             <th>Comments</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         ${Object.entries(groupedNewMeds)
+                           .map(([standardName, meds]) =>
+                             meds
+                               .map(
+                                 (med, index) => `
+                                 <tr>
+                                     <td>${index === 0 ? standardName : ""}</td>
+                                     <td>${
+                                       med.details
+                                         ? formatReportMedication(med.details)
+                                         : "—"
+                                     }</td>
+                                     <td contenteditable="true" class="comments-cell">—</td>
+                                 </tr>
+                             `
+                               )
+                               .join("")
+                           )
+                           .join("")}
+                     </tbody>
+                 </table>
+             `
+                 : ""
+             }
 
-       <div class="report-controls">
-           <button onclick="copyReport()" class="copy-btn">Copy Report</button>
-           <button onclick="printReport()" class="print-btn">Print Report</button>
-           <button onclick="closeReport()" class="close-btn">Close</button>
-       </div>
-   `;
+             <div class="report-controls">
+                 <button onclick="copyReport()" class="copy-btn">Copy Report</button>
+                 <button onclick="printReport()" class="print-btn">Print Report</button>
+                 <button onclick="closeReport()" class="close-btn">Close</button>
+             </div>
+         `;
 
         reportContainer.innerHTML = html;
         document.body.appendChild(reportContainer);
@@ -8235,40 +9321,40 @@
         // Add some inline styles for the copy
         const styleElement = document.createElement("style");
         styleElement.textContent = `
-    .report-container {
-        font-family: Arial, sans-serif;
-        padding: 20px;
-    }
-    .data-table {
-        border-collapse: collapse;
-        width: 100%;
-        margin-bottom: 30px;  /* Increased bottom margin for tables */
-    }
-    .data-table th, .data-table td {
-        border: 1px solid #ddd;
-        padding: 8px;
-        text-align: left;
-    }
-    .data-table th {
-        background-color: #f5f5f5;
-    }
-    h2 {
-        color: #333;
-        font-size: 20px;  /* Larger font size for main title */
-        margin-bottom: 30px;  /* Increased spacing after title */
-        padding-bottom: 10px;  /* Added padding for visual separation */
-        border-bottom: 2px solid #333;  /* Added underline for emphasis */
-    }
-    h3 {
-        color: #666;
-        font-size: 16px;  /* Subtitle size */
-        margin: 25px 0 15px 0;  /* Increased top margin for spacing */
-    }
-    /* Ensure first h3 has proper spacing after h2 */
-    h2 + h3 {
-        margin-top: 30px;
-    }
-`;
+          .report-container {
+              font-family: Arial, sans-serif;
+              padding: 20px;
+          }
+          .data-table {
+              border-collapse: collapse;
+              width: 100%;
+              margin-bottom: 30px;  /* Increased bottom margin for tables */
+          }
+          .data-table th, .data-table td {
+              border: 1px solid #ddd;
+              padding: 8px;
+              text-align: left;
+          }
+          .data-table th {
+              background-color: #f5f5f5;
+          }
+          h2 {
+              color: #333;
+              font-size: 20px;  /* Larger font size for main title */
+              margin-bottom: 30px;  /* Increased spacing after title */
+              padding-bottom: 10px;  /* Added padding for visual separation */
+              border-bottom: 2px solid #333;  /* Added underline for emphasis */
+          }
+          h3 {
+              color: #666;
+              font-size: 16px;  /* Subtitle size */
+              margin: 25px 0 15px 0;  /* Increased top margin for spacing */
+          }
+          /* Ensure first h3 has proper spacing after h2 */
+          h2 + h3 {
+              margin-top: 30px;
+          }
+      `;
 
         tempContainer.appendChild(styleElement);
         tempContainer.appendChild(reportContent);
@@ -8391,19 +9477,19 @@
         // Create new row
         const newRow = document.createElement("tr");
         newRow.innerHTML = `
-        <td class="select-cell">
-            <input type="checkbox" class="row-select" onchange="updateRowSelection(this)">
-        </td>
-        <td class="table-cell" contenteditable="true">${
-          mergedRow.medication || "—"
-        }</td>
-        <td class="table-cell" contenteditable="true">${
-          mergedRow.instructions || "—"
-        }</td>
-        <td class="table-cell" contenteditable="true">${
-          mergedRow.comments || "—"
-        }</td>
-    `;
+              <td class="select-cell">
+                  <input type="checkbox" class="row-select" onchange="updateRowSelection(this)">
+              </td>
+              <td class="table-cell" contenteditable="true">${
+                mergedRow.medication || "—"
+              }</td>
+              <td class="table-cell" contenteditable="true">${
+                mergedRow.instructions || "—"
+              }</td>
+              <td class="table-cell" contenteditable="true">${
+                mergedRow.comments || "—"
+              }</td>
+          `;
 
         // Replace rows
         const firstSelectedRow = selectedRows[0].closest("tr");
@@ -8882,21 +9968,22 @@
             return false;
           }
 
-          // Check for the characteristic headers
+          // Check for the characteristic headers (only requiring the first two columns)
           const headerRow = rows[0].trim();
+          const headerCols = headerRow
+            .split("\t")
+            .map((h) => h.trim().toLowerCase());
+
+          // Check if the first two required headers are present
           return (
-            headerRow.includes("Medication Item") &&
-            headerRow.includes("Instructions") &&
-            (headerRow.includes("Patient Comments") ||
-              headerRow.includes("Acute Medication") ||
-              headerRow.includes("Repeat Medication"))
+            headerCols.some((h) => h.includes("medication item")) &&
+            headerCols.some((h) => h.includes("instructions"))
           );
         } catch (error) {
           console.error("GNCR Abridged Format check error:", error);
           return false;
         }
       }
-
       function formatGNCRAbridgedData(data) {
         try {
           const rows = data.split("\n").filter((row) => row.trim());
@@ -8907,23 +9994,40 @@
             ["Medication", "Instructions", "Comments"].join("\t")
           );
 
-          // Get header indices
+          // Get header indices with more flexible handling
           const headerRow = rows[0].trim();
           const columns = headerRow.split(/\t/);
+
+          // Find required columns (case-insensitive matching)
           const medicationIdx = columns.findIndex((h) =>
-            h.includes("Medication Item")
+            h.toLowerCase().includes("medication item")
           );
           const instructionIdx = columns.findIndex((h) =>
-            h.includes("Instructions")
+            h.toLowerCase().includes("instructions")
           );
-          const patientCommentsIdx = columns.findIndex((h) =>
-            h.includes("Patient Comments")
-          );
+
+          // Find optional columns - any column that might contain comments
+          const commentCandidateIndices = [];
+          columns.forEach((header, idx) => {
+            const headerLower = header.toLowerCase();
+            if (
+              idx !== medicationIdx &&
+              idx !== instructionIdx &&
+              (headerLower.includes("comment") ||
+                headerLower.includes("acute") ||
+                headerLower.includes("repeat") ||
+                headerLower.includes("note") ||
+                headerLower.includes("status") ||
+                headerLower.includes("info"))
+            ) {
+              commentCandidateIndices.push(idx);
+            }
+          });
 
           console.log("Column indices:", {
             medicationIdx,
             instructionIdx,
-            patientCommentsIdx,
+            commentCandidateIndices,
           });
 
           // List of rows to exclude
@@ -8949,11 +10053,16 @@
             const rowColumns = row.split(/\t/);
 
             // Process row if it has a medication
-            if (rowColumns[medicationIdx] && rowColumns[medicationIdx].trim()) {
+            if (
+              medicationIdx < rowColumns.length &&
+              rowColumns[medicationIdx] &&
+              rowColumns[medicationIdx].trim()
+            ) {
               const medication = rowColumns[medicationIdx].trim();
-              let instructionsText = rowColumns[instructionIdx]
-                ? rowColumns[instructionIdx].trim()
-                : "";
+              let instructionsText =
+                instructionIdx < rowColumns.length && rowColumns[instructionIdx]
+                  ? rowColumns[instructionIdx].trim()
+                  : "";
 
               // Parse column with specific pattern
               let mainInstructions = instructionsText;
@@ -8997,13 +10106,30 @@
                 }
               }
 
-              // Add patient comments from separate column if available
-              if (patientCommentsIdx !== -1 && rowColumns[patientCommentsIdx]) {
-                const patientComments = rowColumns[patientCommentsIdx].trim();
-                if (patientComments) {
-                  additionalInfo += additionalInfo ? "; " : "";
-                  additionalInfo += patientComments;
+              // Collect all comments from comment candidate columns
+              let additionalComments = [];
+              commentCandidateIndices.forEach((idx) => {
+                if (
+                  idx < rowColumns.length &&
+                  rowColumns[idx] &&
+                  rowColumns[idx].trim()
+                ) {
+                  // Add column header as prefix if it's not a generic "Comments" header
+                  const header = columns[idx].trim();
+                  const value = rowColumns[idx].trim();
+
+                  if (header.toLowerCase().includes("comment")) {
+                    additionalComments.push(value);
+                  } else {
+                    additionalComments.push(`${header}: ${value}`);
+                  }
                 }
+              });
+
+              // Add collected comments to additional info
+              if (additionalComments.length > 0) {
+                additionalInfo += additionalInfo ? "; " : "";
+                additionalInfo += additionalComments.join("; ");
               }
 
               // Format instructions with bold additional info
@@ -9415,41 +10541,41 @@
         const title = getFormatTitle(format, listNumber);
 
         let tableHTML = `
-        <h2>${title}</h2>
-        <div class="table-controls">
-            <button onclick="resetTable(${listNumber})" class="reset-btn">Reset Table</button>
-            <button onclick="mergeSelectedRows(${listNumber})" class="merge-btn">Merge Selected</button>
-            <button onclick="deleteSelectedRows(${listNumber})" class="delete-btn">Delete Selected</button>
-        </div>
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th class="select-header">Select</th>
-                    <th>Medication</th>
-                    <th>Instructions</th>
-                    <th>Comments</th>
-                </tr>
-            </thead>
-            <tbody>`;
+              <h2>${title}</h2>
+              <div class="table-controls">
+                  <button onclick="resetTable(${listNumber})" class="reset-btn">Reset Table</button>
+                  <button onclick="mergeSelectedRows(${listNumber})" class="merge-btn">Merge Selected</button>
+                  <button onclick="deleteSelectedRows(${listNumber})" class="delete-btn">Delete Selected</button>
+              </div>
+              <table class="data-table">
+                  <thead>
+                      <tr>
+                          <th class="select-header">Select</th>
+                          <th>Medication</th>
+                          <th>Instructions</th>
+                          <th>Comments</th>
+                      </tr>
+                  </thead>
+                  <tbody>`;
 
         for (let i = 1; i < rows.length; i++) {
           const columns = rows[i].split("\t");
           if (columns.length >= 2) {
             tableHTML += `
-                <tr data-row="${i}">
-                    <td class="select-cell">
-                        <input type="checkbox" class="row-select" onchange="updateRowSelection(this)">
-                    </td>
-                    <td class="table-cell" contenteditable="true">${
-                      columns[0] || "—"
-                    }</td>
-                    <td class="table-cell" contenteditable="true">${
-                      columns[1] || "—"
-                    }</td>
-                    <td class="table-cell" contenteditable="true">${
-                      columns[2] || "—"
-                    }</td>
-                </tr>`;
+                      <tr data-row="${i}">
+                          <td class="select-cell">
+                              <input type="checkbox" class="row-select" onchange="updateRowSelection(this)">
+                          </td>
+                          <td class="table-cell" contenteditable="true">${
+                            columns[0] || "—"
+                          }</td>
+                          <td class="table-cell" contenteditable="true">${
+                            columns[1] || "—"
+                          }</td>
+                          <td class="table-cell" contenteditable="true">${
+                            columns[2] || "—"
+                          }</td>
+                      </tr>`;
           }
         }
 
@@ -9471,125 +10597,125 @@
         const style = document.createElement("style");
         style.id = "table-styles";
         style.textContent = `
-        * {
-            font-family: Verdana, sans-serif;
-            font-size: 10pt;
-        }
+              * {
+                  font-family: Verdana, sans-serif;
+                  font-size: 10pt;
+              }
 
-        h2 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 12pt;
-            font-weight: 600;
-            font-family: Verdana, sans-serif;
-        }
+              h2 {
+                  color: #333;
+                  margin-bottom: 15px;
+                  font-size: 12pt;
+                  font-weight: 600;
+                  font-family: Verdana, sans-serif;
+              }
 
-        .table-controls {
-            margin-bottom: 10px;
-            display: flex;
-            gap: 10px;
-        }
-        
-        .reset-btn, .delete-btn, .merge-btn {
-            font-family: Verdana, sans-serif;
-            font-size: 10pt;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-        }
-        
-        .reset-btn {
-            background-color: #2196F3;
-            color: white;
-        }
-        
-        .delete-btn {
-            background-color: #f44336;
-            color: white;
-        }
+              .table-controls {
+                  margin-bottom: 10px;
+                  display: flex;
+                  gap: 10px;
+              }
 
-        .merge-btn {
-            background-color: #FF9800;
-            color: white;
-        }
+              .reset-btn, .delete-btn, .merge-btn {
+                  font-family: Verdana, sans-serif;
+                  font-size: 10pt;
+                  padding: 8px 16px;
+                  border: none;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-weight: 500;
+              }
 
-        .merge-btn:hover {
-            background-color: #F57C00;
-        }
+              .reset-btn {
+                  background-color: #2196F3;
+                  color: white;
+              }
 
-        .data-table {
-            font-family: Verdana, sans-serif;
-            font-size: 10pt;
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        
-        .data-table th, .data-table td {
-            font-family: Verdana, sans-serif;
-            font-size: 10pt;
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
+              .delete-btn {
+                  background-color: #f44336;
+                  color: white;
+              }
 
-        .data-table td.table-cell {
-            min-width: 150px;
-            max-width: 300px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: normal;
-            word-wrap: break-word;
-            font-family: Verdana, sans-serif;
-            font-size: 10pt;
-        }
+              .merge-btn {
+                  background-color: #FF9800;
+                  color: white;
+              }
 
-        .select-header, .select-cell {
-            width: 50px;
-            text-align: center !important;
-        }
-        
-        .data-table th {
-            background-color: #f5f5f5;
-            font-weight: 600;
-        }
-        
-        .table-cell {
-            position: relative;
-            min-height: 1.2em;
-        }
-        
-        .table-cell:focus {
-            outline: 2px solid #2196F3;
-            background-color: #fff;
-            padding: 7px;
-        }
-        
-        .table-cell:empty::before {
-            content: '—';
-            color: #999;
-        }
-        
-        .data-table tr.selected {
-            background-color: #e3f2fd;
-        }
-        
-        .row-select {
-            cursor: pointer;
-            width: 16px;
-            height: 16px;
-        }
+              .merge-btn:hover {
+                  background-color: #F57C00;
+              }
 
-        .table-container h2 {
-            margin-top: 0;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            font-family: Verdana, sans-serif;
-            font-size: 12pt;
-        }
-    `;
+              .data-table {
+                  font-family: Verdana, sans-serif;
+                  font-size: 10pt;
+                  width: 100%;
+                  border-collapse: collapse;
+                  margin-top: 10px;
+              }
+
+              .data-table th, .data-table td {
+                  font-family: Verdana, sans-serif;
+                  font-size: 10pt;
+                  border: 1px solid #ddd;
+                  padding: 8px;
+                  text-align: left;
+              }
+
+              .data-table td.table-cell {
+                  min-width: 150px;
+                  max-width: 300px;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: normal;
+                  word-wrap: break-word;
+                  font-family: Verdana, sans-serif;
+                  font-size: 10pt;
+              }
+
+              .select-header, .select-cell {
+                  width: 50px;
+                  text-align: center !important;
+              }
+
+              .data-table th {
+                  background-color: #f5f5f5;
+                  font-weight: 600;
+              }
+
+              .table-cell {
+                  position: relative;
+                  min-height: 1.2em;
+              }
+
+              .table-cell:focus {
+                  outline: 2px solid #2196F3;
+                  background-color: #fff;
+                  padding: 7px;
+              }
+
+              .table-cell:empty::before {
+                  content: '—';
+                  color: #999;
+              }
+
+              .data-table tr.selected {
+                  background-color: #e3f2fd;
+              }
+
+              .row-select {
+                  cursor: pointer;
+                  width: 16px;
+                  height: 16px;
+              }
+
+              .table-container h2 {
+                  margin-top: 0;
+                  padding-bottom: 10px;
+                  border-bottom: 1px solid #eee;
+                  font-family: Verdana, sans-serif;
+                  font-size: 12pt;
+              }
+          `;
         document.head.appendChild(style);
       }
       function initializeTableBehavior(listNumber) {
@@ -9756,17 +10882,14 @@
       }
 
       function handlePaste(event, listNumber) {
-        // Prevent the default paste behavior
         event.preventDefault();
-
-        // Get the clipboard data as text
         const text = event.clipboardData.getData("text");
-
-        // Set the textarea value
         event.target.value = text;
 
-        // Process the list immediately after paste
-        processList(listNumber);
+        // Wait for next frame to ensure DOM is updated
+        requestAnimationFrame(() => {
+          processList(listNumber);
+        });
       }
     </script>
   </body>
