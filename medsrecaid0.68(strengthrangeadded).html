@@ -503,7 +503,7 @@
           anbesol: ["anbesol"],
           andexanet: ["andexanet", "ondexxya"],
           androstanolone: ["androstanolone"],
-          anoro: ["anoro", "umeclidinium/vilanterol"],
+          "umeclidinium/vilanterol": ["anoro", "umeclidinium/vilanterol"],
           "antithymocyte globulin": [
             "antithymocyte globulin",
             "a.t.g horse",
@@ -1022,6 +1022,7 @@
             "invita d3",
             "thorens",
             "stexerol",
+            "BabyD",
           ],
           colestipol: ["colestipol", "colestid"],
           colesevelam: ["colesevelam", "cholestagel"],
@@ -1249,7 +1250,11 @@
             "repevax",
           ],
           duac: ["duac", "clindamycin/benzoyl peroxide"],
-          duaklir: ["duaklir genuair", "aclidinium/formoterol"],
+          "aclidinium/formoterol": [
+            "duaklir genuair",
+            "Duaklir",
+            "aclidinium/formoterol",
+          ],
           dulaglutide: ["dulaglutide", "trulicity"],
           duloxetine: ["duloxetine", "cymbalta", "yentreve"],
           duocal: ["duocal"],
@@ -2133,6 +2138,10 @@
           mebendazole: ["mebendazole", "vermox", "ovex"],
           mebeverine: ["mebeverine", "colofac", "aurobeverine"],
           "Medi Derma-S": ["Medi Derma-S", "medi-derma s"],
+          "Medi Derma-Pro": [
+            "Medi Derma-Pro skin protectant ointment",
+            "Mede Derma Pro",
+          ],
           medroxyprogesterone: [
             "medroxyprogesterone",
             "provera",
@@ -2497,7 +2506,6 @@
             "peptamen vanilla",
           ],
           "pepti-junior": ["pepti-junior"],
-          peptisorb: ["peptisorb", "nutrison peptisorb plus hehp"],
           peptac: ["peptac", "peptac liquid", "peptac suspension"],
           perampanel: ["perampanel", "fycompa"],
           pergolide: ["pergolide", "celance"],
@@ -2717,7 +2725,10 @@
           ravulizumab: ["ravulizumab", "ultomiris"],
           reboxetine: ["reboxetine", "edronax"],
           regorafenib: ["regorafenib", "stivarga"],
-          relvar: ["relvar ellipta", "fluticasone furoate/vilanterol"],
+          "fluticasone furoate/vilanterol": [
+            "relvar ellipta",
+            "fluticasone furoate/vilanterol",
+          ],
           "relugolix/estradiol/norethisterone": [
             "relugolix/estradiol/norethisterone",
             "ryeqo",
@@ -2931,7 +2942,11 @@
             "suxamethonium",
             "anectine",
           ],
-          symbicort: ["symbicort", "budesonide/formoterol"],
+          "budesonide/formoterol": [
+            "Symbicort",
+            "budesonide/formoterol",
+            "Fobumix",
+          ],
           symtuza: ["symtuza", "darunavir/cobicistat/emtricitabine/tenofovir"],
           syntometrine: ["syntometrine", "ergometrine/oxytocin"],
           syreniring: ["syreniring"],
@@ -3086,7 +3101,7 @@
           travoprost: ["travoprost", "travatan"],
           "travoprost/timolol": ["travoprost/timolol", "duotrav"],
           trazodone: ["trazodone", "molipaxin"],
-          trelegy: [
+          "fluticasone/umeclidinium/vilanterol": [
             "trelegy",
             "trelegy ellipta",
             "fluticasone/umeclidinium/vilanterol",
@@ -3107,7 +3122,7 @@
           trihexyphenidyl: ["trihexyphenidyl", "benzhexol"],
           trimethoprim: ["trimethoprim", "monotrim"],
           trimipramine: ["trimipramine", "surmontil"],
-          trimbow: [
+          "beclometasone/formoterol/glycopyrronium": [
             "trimbow",
             "beclometasone/formoterol/glycopyrronium",
             "beclometasone/extrafine/parti3 ",
@@ -3929,9 +3944,6 @@
                     "powder for oral suspension",
                     "granules for oral suspension",
                     "oral powder sachet",
-                    "sachet",
-                    "sach",
-                    "sachets",
                     "powder for solution",
                     "powder for susp",
                     "powder for suspension",
@@ -3954,6 +3966,8 @@
                 terms: [
                   "granules",
                   "sachets",
+                  "sach",
+                  "sachet",
                   "powder sachets",
                   "gran",
                   "gran sachet",
@@ -5367,12 +5381,13 @@
         if (!numberStr) return "";
         // Convert to string if it's a number
         let cleaned = numberStr.toString();
-        // Remove all spaces
+        // Remove all spaces first
         cleaned = cleaned.replace(/\s+/g, "");
-        // Remove commas while preserving decimal points
+        // Remove commas (thousand separators) while preserving decimal points
         cleaned = cleaned.replace(/,/g, "");
-        // Handle both dot and comma decimal separators
-        cleaned = cleaned.replace(/,(\d+)$/, ".$1");
+        // Handle both dot and comma decimal separators (for international formats)
+        // Only replace the last comma with a dot if it's followed by 1-3 digits (decimal separator)
+        cleaned = cleaned.replace(/,(\d{1,3})$/, ".$1");
         return cleaned;
       }
       function isStandaloneNumber(text, numberMatch) {
@@ -5391,30 +5406,43 @@
         return true;
       }
       // Helper function to infer units for combination products when units are missing
-      function inferUnits(medicationString, values) {
-        const med = medicationString.toLowerCase();
+      // Modify the inferUnitsFromMedication function
+      function inferUnitsFromMedication(standardName, medicationString) {
+        const lowerMed = medicationString.toLowerCase();
 
-        // For inhalers and respiratory medications
-        if (
-          med.includes("inhaler") ||
-          med.includes("mdi") ||
-          med.includes("turbohaler") ||
-          med.includes("accuhaler") ||
-          med.includes("evohaler") ||
-          med.includes("fostair") ||
-          med.includes("symbicort") ||
-          med.includes("seretide") ||
-          med.includes("flutiform") ||
-          med.includes("fobumix") ||
-          med.includes("duoresp") ||
-          med.includes("combisal")
-        ) {
-          // For inhalers, assume micrograms for all values
-          return values.map(() => "microg");
+        // Check if this is actually an inhaler formulation
+        const isActuallyInhaler = isInhalerFormulation(medicationString);
+
+        // Only treat as inhaler if it contains inhaler formulation terms
+        if (isActuallyInhaler) {
+          // Check if this is a triple combination
+          if (standardName.split("/").length === 3) {
+            return ["microg", "microg", "microg"];
+          }
+
+          // Check if this is a double combination
+          if (standardName.split("/").length === 2) {
+            return ["microg", "microg"];
+          }
         }
 
-        // Default to empty units if no specific rule applies
-        return values.map(() => "");
+        // For non-inhaler combinations, default to mg
+        const componentCount = standardName.split("/").length;
+        if (componentCount > 1) {
+          return Array(componentCount).fill("mg");
+        }
+
+        // Look in the medication string for unit mentions for single medications
+        const unitMatches = lowerMed.match(/microgram|microg|mcg|μg|mg/g);
+        if (unitMatches && unitMatches.length > 0) {
+          const unit = unitMatches[0]
+            .replace("μg", "microg")
+            .replace("mcg", "microg");
+          return [unit];
+        }
+
+        // Default to empty string for single medications
+        return [""];
       }
       // Pattern for inhaler combinations - define this before extractStrength function
       function buildInhalerPattern() {
@@ -5464,6 +5492,84 @@
         "i"
       );
 
+      function isInhalerFormulation(medicationString) {
+        const lowerMed = medicationString.toLowerCase();
+
+        // Check against all inhaler formulation terms
+        function searchInhalerTerms(obj) {
+          for (const [category, value] of Object.entries(obj)) {
+            if (Array.isArray(value)) {
+              if (value.some((term) => lowerMed.includes(term.toLowerCase()))) {
+                return true;
+              }
+            } else if (typeof value === "object" && value !== null) {
+              if (value.priority_groups) {
+                for (const group of Object.values(value.priority_groups)) {
+                  if (group.terms) {
+                    if (Array.isArray(group.terms)) {
+                      if (
+                        group.terms.some((term) =>
+                          lowerMed.includes(term.toLowerCase())
+                        )
+                      ) {
+                        return true;
+                      }
+                    } else if (typeof group.terms === "object") {
+                      for (const termList of Object.values(group.terms)) {
+                        if (
+                          Array.isArray(termList) &&
+                          termList.some((term) =>
+                            lowerMed.includes(term.toLowerCase())
+                          )
+                        ) {
+                          return true;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              if (searchInhalerTerms(value)) return true;
+            }
+          }
+          return false;
+        }
+
+        return searchInhalerTerms(formulationDict.inhaled);
+      }
+      function parseStrengthRange(medicationString) {
+        console.log("Checking for strength ranges in:", medicationString);
+
+        // Pattern to match ranges like "3.1-3.7g", "25-50mg", "1.5-2.0mg/ml"
+        const rangePattern =
+          /(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)/gi;
+        const matches = Array.from(medicationString.matchAll(rangePattern));
+
+        if (matches.length > 0) {
+          const match = matches[0]; // Take the first range found
+          const minValue = parseFloat(match[1]);
+          const maxValue = parseFloat(match[2]);
+          const unit = match[3].toLowerCase();
+
+          console.log("Found strength range:", {
+            min: minValue,
+            max: maxValue,
+            unit: unit,
+            original: match[0],
+          });
+
+          return {
+            isRange: true,
+            min: minValue,
+            max: maxValue,
+            unit: unit,
+            original: match[0],
+            midpoint: (minValue + maxValue) / 2,
+          };
+        }
+
+        return null;
+      }
       function extractStrength(medicationString) {
         if (isDermolPreparation(medicationString)) {
           console.log(
@@ -5582,11 +5688,14 @@
             const componentCount = combinationDetectionResult.componentCount;
             console.log("Component count:", componentCount);
 
-            // Get the appropriate units based on the medication name
+            // Get the appropriate units based on the medication name and formulation
             const units = inferUnitsFromMedication(
               combinationDetectionResult.standardName,
               medicationString
             );
+
+            // Check if this is actually an inhaler formulation
+            const isActuallyInhaler = isInhalerFormulation(medicationString);
 
             // Format the response based on component count
             if (componentCount === 3 && allNumbers.length >= 3) {
@@ -5600,11 +5709,15 @@
                     parseFloat(allNumbers[2]),
                   ],
                   units:
-                    units.length === 3 ? units : ["microg", "microg", "microg"], // Default if inference fails
+                    units.length === 3
+                      ? units
+                      : isActuallyInhaler
+                      ? ["microg", "microg", "microg"]
+                      : ["mg", "mg", "mg"],
                   isCombination: true,
                   combinationType: "triple",
                   fullMatch: medicationString,
-                  isInhalerCombination: true,
+                  isInhalerCombination: isActuallyInhaler,
                 },
               ];
             } else {
@@ -5616,11 +5729,16 @@
                     parseFloat(allNumbers[0]),
                     parseFloat(allNumbers[1]),
                   ],
-                  units: units.length === 2 ? units : ["microg", "microg"], // Default if inference fails
+                  units:
+                    units.length === 2
+                      ? units
+                      : isActuallyInhaler
+                      ? ["microg", "microg"]
+                      : ["mg", "mg"],
                   isCombination: true,
                   combinationType: "double",
                   fullMatch: medicationString,
-                  isInhalerCombination: true,
+                  isInhalerCombination: isActuallyInhaler,
                 },
               ];
             }
@@ -6084,8 +6202,9 @@
             ];
           }
 
-          // Look for standalone unit measure - e.g., "800 unit" or "800unit"
-          const unitPattern = /(\d+)(?:\s*)(?:unit|units?|iu|i\.u\.)\b/i;
+          // Look for standalone unit measure - e.g., "800 unit", "800unit", or "1,000unit"
+          const unitPattern =
+            /(\d+(?:,\d+)*)(?:\s*)(?:unit|units?|iu|i\.u\.)\b/i;
           const unitMatch = medicationString.match(unitPattern);
 
           if (unitMatch) {
@@ -6095,10 +6214,12 @@
               index > 0 && /[A-Za-z]/.test(medicationString[index - 1]);
 
             if (!isPrecededByLetter) {
+              // Clean the number (remove commas)
+              const cleanedNumber = sanitizeNumber(unitMatch[1]);
               return [
                 {
                   original: unitMatch[0],
-                  values: [parseFloat(unitMatch[1])],
+                  values: [parseFloat(cleanedNumber)],
                   units: ["unit"],
                   isCombination: false,
                   combinationType: "single",
@@ -6108,7 +6229,6 @@
               ];
             }
           }
-
           // Look for mcg measurement - e.g., "20 mcg"
           const mcgPattern = /(\d+(?:\.\d+)?)\s*(?:mc?g|µg|ug|microgram)/i;
           const mcgMatch = medicationString.match(mcgPattern);
@@ -6131,7 +6251,25 @@
             ];
           }
         }
-
+        // ----- STRENGTH RANGE HANDLING -----
+        const strengthRange = parseStrengthRange(medicationString);
+        if (strengthRange) {
+          console.log("Processing as strength range medication");
+          return [
+            {
+              original: strengthRange.original,
+              values: [strengthRange.min, strengthRange.max],
+              units: [strengthRange.unit, strengthRange.unit],
+              isCombination: false,
+              combinationType: "range",
+              fullMatch: strengthRange.original,
+              isRange: true,
+              minValue: strengthRange.min,
+              maxValue: strengthRange.max,
+              midpoint: strengthRange.midpoint,
+            },
+          ];
+        }
         // ----- INSULIN HANDLING -----
 
         // Check if this is an insulin product
@@ -6528,9 +6666,9 @@
 
         const percentageUnitPattern = "%|percent|percentage";
 
-        const numberPattern = "([0-9]+(?:,[0-9]+)*(?:\\.[0-9]*)?|\\.[0-9]+)";
+        const numberPattern =
+          "([0-9]+(?:,[0-9]+)*(?:\\.[0-9]*)?(?:\\s*-\\s*[0-9]+(?:,[0-9]+)*(?:\\.[0-9]*)?)?|\\.[0-9]+)";
 
-        // Update the numberWithUnits pattern to include molar units
         const numberWithUnits = `${numberPattern}\\s*(${massUnitPattern}|${molarUnitPattern}|${volumeUnitPattern}|${percentageUnitPattern})?`;
         const patterns = [
           {
@@ -6539,7 +6677,8 @@
               "i"
             ),
             handler: (match) => {
-              if (!isStandaloneNumber(cleanedString, match[1])) return null;
+              if (!isStandaloneNumber(cleanedString, sanitizeNumber(match[1])))
+                return null;
               const [_, val1, unit1, val2, unit2, val3, unit3] = match;
               const lastUnit = (unit3 || unit2 || unit1 || "").toLowerCase();
 
@@ -6547,15 +6686,15 @@
                 original: match[0],
                 values: [
                   standardizeUnit(
-                    val1.replace(/,/g, ""),
+                    sanitizeNumber(val1),
                     unit1?.toLowerCase() || lastUnit
                   ),
                   standardizeUnit(
-                    val2.replace(/,/g, ""),
+                    sanitizeNumber(val2),
                     unit2?.toLowerCase() || lastUnit
                   ),
                   standardizeUnit(
-                    val3.replace(/,/g, ""),
+                    sanitizeNumber(val3),
                     unit3?.toLowerCase() || lastUnit
                   ),
                 ],
@@ -6576,7 +6715,8 @@
               "i"
             ),
             handler: (match) => {
-              if (!isStandaloneNumber(cleanedString, match[1])) return null;
+              if (!isStandaloneNumber(cleanedString, sanitizeNumber(match[1])))
+                return null;
               const [fullMatch] = match;
               const parts = fullMatch.split(/\//).map((part) => part.trim());
               const numberMatch = parts[0].match(
@@ -6587,7 +6727,7 @@
                 return {
                   original: fullMatch,
                   values: [
-                    parseFloat(numberMatch[1].replace(/,/g, "")),
+                    parseFloat(sanitizeNumber(numberMatch[1])),
                     "unit",
                     1,
                     "ml",
@@ -6606,14 +6746,15 @@
               "i"
             ),
             handler: (match) => {
-              if (!isStandaloneNumber(cleanedString, match[1])) return null;
+              if (!isStandaloneNumber(cleanedString, sanitizeNumber(match[1])))
+                return null;
               const [fullMatch, val1, unit1, val2, unit2] = match;
               return {
                 original: match[0],
                 values: [
-                  parseFloat(val1.replace(/,/g, "")),
+                  parseFloat(sanitizeNumber(val1)),
                   unit1.toLowerCase(),
-                  parseFloat(val2?.replace(/,/g, "") || 1),
+                  parseFloat(sanitizeNumber(val2) || 1),
                   unit2?.toLowerCase() || "ml",
                 ],
                 isConcentration: true,
@@ -6628,7 +6769,8 @@
               "i"
             ),
             handler: (match) => {
-              if (!isStandaloneNumber(cleanedString, match[1])) return null;
+              if (!isStandaloneNumber(cleanedString, sanitizeNumber(match[1])))
+                return null;
               const [fullMatch, val1, unit1, val2, unit2] = match;
               const lastUnit = (unit2 || unit1 || "").toLowerCase();
 
@@ -6636,11 +6778,11 @@
                 original: fullMatch,
                 values: [
                   standardizeUnit(
-                    val1.replace(/,/g, ""),
+                    sanitizeNumber(val1),
                     unit1?.toLowerCase() || lastUnit
                   ),
                   standardizeUnit(
-                    val2.replace(/,/g, ""),
+                    sanitizeNumber(val2),
                     unit2?.toLowerCase() || lastUnit
                   ),
                 ],
@@ -6660,11 +6802,12 @@
               "i"
             ),
             handler: (match) => {
-              if (!isStandaloneNumber(cleanedString, match[1])) return null;
+              if (!isStandaloneNumber(cleanedString, sanitizeNumber(match[1])))
+                return null;
               const [_, value, unit] = match;
               return {
                 original: match[0],
-                values: [parseFloat(value.replace(/,/g, ""))],
+                values: [parseFloat(sanitizeNumber(value))],
                 units: [unit?.toLowerCase()],
                 isPercentage: true,
                 combinationType: "single",
@@ -6675,11 +6818,12 @@
           {
             pattern: new RegExp(numberWithUnits, "i"),
             handler: (match) => {
-              if (!isStandaloneNumber(cleanedString, match[1])) return null;
+              if (!isStandaloneNumber(cleanedString, sanitizeNumber(match[1])))
+                return null;
               const [_, value, unit] = match;
               return {
                 original: match[0],
-                values: [parseFloat(value.replace(/,/g, ""))],
+                values: [parseFloat(sanitizeNumber(value))],
                 units: [unit?.toLowerCase()],
                 isCombination: false,
                 combinationType: "single",
@@ -6707,7 +6851,7 @@
 
         // If no strength found, try to extract numerical values as a last resort
         if (strengths.length === 0) {
-          const numericPattern = /\b(\d+(?:\.\d+)?)\b/g;
+          const numericPattern = /\b(\d+(?:,\d+)*(?:\.\d+)?)\b/g;
           const numericMatches = Array.from(
             cleanedString.matchAll(numericPattern)
           )
@@ -6720,7 +6864,7 @@
                 )
               );
             })
-            .map((match) => parseFloat(match[1]));
+            .map((match) => parseFloat(sanitizeNumber(match[1])));
 
           if (numericMatches.length > 0) {
             console.log("Found numeric values as fallback:", numericMatches);
@@ -6752,7 +6896,6 @@
         console.log("Final extracted strengths:", strengths);
         return strengths.length > 0 ? strengths : null;
       }
-
       function standardizeStrength(strengthObj) {
         if (!strengthObj?.values?.length) return null;
 
@@ -7174,6 +7317,21 @@
             return null;
           }
 
+          // Handle range values - ADD THIS SECTION
+          if (strength.isRange) {
+            console.log("Processing range strength");
+            // For ranges, use the midpoint for total calculation
+            const midpoint = (strength.minValue + strength.maxValue) / 2;
+            const standardizedMidpoint = standardizeUnit(
+              midpoint,
+              strength.units[0]
+            );
+            console.log(
+              `Range midpoint: ${midpoint} ${strength.units[0]} -> ${standardizedMidpoint}`
+            );
+            return standardizedMidpoint;
+          }
+
           // NEW: Special handling for inhaler combinations without units
           if (isInhaler1 || isInhaler2) {
             if (
@@ -7342,7 +7500,156 @@
           // Compare the values with a small tolerance
           return Math.abs(value1 - value2) < 0.000001 ? "match" : "different";
         }
+        // Special handling for strength ranges
+        if (strengths1[0]?.isRange || strengths2[0]?.isRange) {
+          console.log("Comparing strength ranges");
 
+          const range1 = strengths1[0];
+          const range2 = strengths2[0];
+
+          // Case 1: Both are ranges
+          if (range1?.isRange && range2?.isRange) {
+            // Check if ranges are identical
+            if (
+              Math.abs(range1.minValue - range2.minValue) < 0.001 &&
+              Math.abs(range1.maxValue - range2.maxValue) < 0.001 &&
+              range1.units[0] === range2.units[0]
+            ) {
+              console.log("✅ EXACT RANGE MATCH found");
+              return "match";
+            }
+
+            // Check if ranges overlap
+            const range1Min = standardizeUnit(range1.minValue, range1.units[0]);
+            const range1Max = standardizeUnit(range1.maxValue, range1.units[0]);
+            const range2Min = standardizeUnit(range2.minValue, range2.units[0]);
+            const range2Max = standardizeUnit(range2.maxValue, range2.units[0]);
+
+            if (
+              range1Min !== null &&
+              range1Max !== null &&
+              range2Min !== null &&
+              range2Max !== null
+            ) {
+              // Check for overlap: ranges overlap if max1 >= min2 && max2 >= min1
+              const hasOverlap =
+                range1Max >= range2Min && range2Max >= range1Min;
+
+              if (hasOverlap) {
+                console.log("🟡 RANGE OVERLAP found - marking as similar");
+                return "similar";
+              }
+            }
+
+            console.log("❌ NO RANGE OVERLAP found");
+            return "different";
+          }
+
+          // Case 2: One is a range, other is a single value (including concentrations)
+          if (range1?.isRange && !range2?.isRange) {
+            console.log("Comparing range vs single value/concentration");
+
+            let singleValue;
+            let singleUnit;
+
+            // Handle concentration values
+            if (range2.isConcentration) {
+              singleValue = getConcentrationValue(range2);
+              singleUnit = "g"; // Assuming concentration is in g/ml, adjust as needed
+            } else {
+              singleValue = range2.values[0];
+              singleUnit = range2.units?.[0] || "";
+            }
+
+            console.log("Single value details:", { singleValue, singleUnit });
+            console.log("Range details:", {
+              min: range1.minValue,
+              max: range1.maxValue,
+              unit: range1.units[0],
+            });
+
+            const standardizedSingle = standardizeUnit(singleValue, singleUnit);
+            const rangeMin = standardizeUnit(range1.minValue, range1.units[0]);
+            const rangeMax = standardizeUnit(range1.maxValue, range1.units[0]);
+
+            console.log("Standardized values:", {
+              standardizedSingle,
+              rangeMin,
+              rangeMax,
+            });
+
+            if (
+              standardizedSingle !== null &&
+              rangeMin !== null &&
+              rangeMax !== null
+            ) {
+              if (
+                standardizedSingle >= rangeMin &&
+                standardizedSingle <= rangeMax
+              ) {
+                console.log(
+                  "🟡 SINGLE VALUE WITHIN RANGE - marking as similar"
+                );
+                return "similar";
+              }
+            }
+
+            console.log("❌ SINGLE VALUE OUTSIDE RANGE");
+            return "different";
+          }
+
+          if (!range1?.isRange && range2?.isRange) {
+            console.log("Comparing single value/concentration vs range");
+
+            let singleValue;
+            let singleUnit;
+
+            // Handle concentration values
+            if (range1.isConcentration) {
+              singleValue = getConcentrationValue(range1);
+              singleUnit = "g"; // Assuming concentration is in g/ml, adjust as needed
+            } else {
+              singleValue = range1.values[0];
+              singleUnit = range1.units?.[0] || "";
+            }
+
+            console.log("Single value details:", { singleValue, singleUnit });
+            console.log("Range details:", {
+              min: range2.minValue,
+              max: range2.maxValue,
+              unit: range2.units[0],
+            });
+
+            const standardizedSingle = standardizeUnit(singleValue, singleUnit);
+            const rangeMin = standardizeUnit(range2.minValue, range2.units[0]);
+            const rangeMax = standardizeUnit(range2.maxValue, range2.units[0]);
+
+            console.log("Standardized values:", {
+              standardizedSingle,
+              rangeMin,
+              rangeMax,
+            });
+
+            if (
+              standardizedSingle !== null &&
+              rangeMin !== null &&
+              rangeMax !== null
+            ) {
+              if (
+                standardizedSingle >= rangeMin &&
+                standardizedSingle <= rangeMax
+              ) {
+                console.log(
+                  "🟡 SINGLE VALUE WITHIN RANGE - marking as similar"
+                );
+                return "similar";
+              }
+            }
+
+            console.log("❌ SINGLE VALUE OUTSIDE RANGE");
+            return "different";
+          }
+        }
         // Special handling for insulin strengths
         if (
           strengths1[0]?.isInsulinStrength ||
@@ -8773,7 +9080,8 @@
             return result;
           }
 
-          const numberPattern = "\\d+(?:,\\d+)*(?:\\.\\d+)?";
+          const numberPattern =
+            "([0-9]+(?:,[0-9]+)*(?:\\.[0-9]*)?(?:\\s*-\\s*[0-9]+(?:,[0-9]+)*(?:\\.[0-9]*)?)?|\\.[0-9]+)";
           const millionPattern =
             "(?:\\d+(?:\\.\\d+)?\\s*(?:x\\s*)?10\\^6|\\d+(?:\\.\\d+)?\\s*(?:million|mega))";
           const unitsPattern =
@@ -9586,7 +9894,9 @@
               nextLine.endsWith("PRN") ||
               nextLine.includes("Protocol") ||
               nextLine.includes("STA") ||
-              nextLine.includes("ONE"))
+              nextLine.includes("ONE") ||
+              nextLine.endsWith("Taper") ||
+              nextLine.includes("; Taper"))
           );
         }
 
@@ -9627,12 +9937,31 @@
             return true;
           }
 
-          // Check for trigger words at end of line
-          const triggerWords = ["SCH", "PRN", "Protocol", "STA", "ONE"];
-          const trimmedText = text.trim();
-          return triggerWords.some((word) =>
-            trimmedText.toUpperCase().endsWith(word)
-          );
+          // Enhanced trigger words including "Taper"
+          const triggerWords = [
+            "SCH",
+            "PRN",
+            "Protocol",
+            "STA",
+            "ONE",
+            "Taper",
+          ];
+          const trimmedText = text.trim().toUpperCase();
+
+          // Check if line ends with any trigger word
+          if (triggerWords.some((word) => trimmedText.endsWith(word))) {
+            return true;
+          }
+
+          // Also check if line contains any trigger word after a semicolon
+          if (text.includes(";")) {
+            const afterSemicolon = text.split(";").pop().trim().toUpperCase();
+            if (triggerWords.some((word) => afterSemicolon.includes(word))) {
+              return true;
+            }
+          }
+
+          return false;
         }
 
         // Find the "Current Medications" line
