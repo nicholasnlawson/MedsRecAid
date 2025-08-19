@@ -4418,7 +4418,7 @@
               specific_formulations: {
                 priority: 3,
                 terms: {
-                  drops: [
+                  "eye drops": [
                     "eye drops",
                     "eyedrops",
                     "ophthalmic drops",
@@ -4453,7 +4453,6 @@
                   gel: [
                     "ophthalmic gel",
                     "eye gel",
-                    "liquid gel",
                     "opth gel",
                     "gel for eye use",
                   ],
@@ -5742,6 +5741,194 @@
         const strengths = [];
         const textToAnalyze = medicationString;
 
+        // Check if this is a calcium/vitamin D combination
+        const isCalciumVitD = (med) => {
+          const lowerMed = med.toLowerCase();
+          return (
+            lowerMed.includes("calceos") ||
+            lowerMed.includes("adcal-d3") ||
+            lowerMed.includes("calcichew d3") ||
+            lowerMed.includes("calfovit d3") ||
+            lowerMed.includes("cacit d3") ||
+            lowerMed.includes("natecal") ||
+            lowerMed.includes("evacal d3") ||
+            lowerMed.includes("accrete d3") ||
+            // Look specifically for colecal
+            lowerMed.includes("colecal") ||
+            // Better pattern to match calcium + vitamin D
+            (lowerMed.includes("calcium") &&
+              (lowerMed.includes("vitamin d") ||
+                lowerMed.includes("colecal") ||
+                lowerMed.includes("d3") ||
+                lowerMed.includes("vit d")))
+          );
+        };
+
+        // Check if this is a vitamin D preparation
+        const isVitaminD = (med) => {
+          const lowerMed = med.toLowerCase();
+          return (
+            lowerMed.includes("vitamin d") ||
+            lowerMed.includes("colecalciferol") ||
+            lowerMed.includes("fultium") ||
+            lowerMed.includes("strivit") ||
+            lowerMed.includes("invita d3") ||
+            lowerMed.includes("thorens") ||
+            lowerMed.includes("stexerol") ||
+            lowerMed.includes("d3")
+          );
+        };
+
+        // ----- CALCIUM & VITAMIN D COMBINATIONS -----
+        const isCalciumVitDResult = isCalciumVitD(medicationString);
+
+        if (isCalciumVitDResult) {
+          console.log("Processing as calcium/vitamin D combination");
+
+          // New, more robust pattern to capture various Ca/VitD formats
+          const comprehensivePattern =
+            /(\d+(?:\.\d+)?)\s*(g|mg)\s*(?:\/|with|&|\+)\s*(?:[a-zA-Z\s]*d3\s*)?(\d+(?:\.\d+)?)\s*(unit|iu|mcg|microg)/i;
+          const match = medicationString.match(comprehensivePattern);
+
+          let calciumValue = null;
+          let vitDValue = null;
+
+          if (match) {
+            console.log("Calcium/VitD comprehensive pattern matched:", match);
+            calciumValue = parseFloat(match[1]);
+            const calciumUnit = match[2].toLowerCase();
+
+            vitDValue = parseFloat(match[3]);
+            const vitDUnit = match[4].toLowerCase();
+
+            // Standardize calcium to mg
+            if (calciumUnit.startsWith("g")) {
+              calciumValue *= 1000;
+            }
+
+            // Standardize vitamin D to units
+            if (vitDUnit === "mcg" || vitDUnit === "microg") {
+              vitDValue *= 40; // 1 mcg = 40 IU
+            }
+          } else {
+            // Fallback for edge cases where the comprehensive pattern fails
+            const calciumPattern = /(\d+(?:\.\d+)?)\s*(?:mg|g|gram|grams)/i;
+            const vitDUnitPattern = /(\d+)\s*(?:unit|units?|iu|i\.u\.)/i;
+            const vitDMcgPattern = /(\d+)\s*(?:microg|mcg|μg|ug)/i;
+
+            const calciumMatch = medicationString.match(calciumPattern);
+            const vitDUnitMatch = medicationString.match(vitDUnitPattern);
+            const vitDMcgMatch = medicationString.match(vitDMcgPattern);
+
+            if (calciumMatch) {
+              calciumValue = parseFloat(calciumMatch[1]);
+              if (calciumMatch[0].toLowerCase().includes("g")) {
+                calciumValue *= 1000;
+              }
+            }
+            if (vitDUnitMatch) {
+              vitDValue = parseFloat(vitDUnitMatch[1]);
+            } else if (vitDMcgMatch) {
+              vitDValue = parseFloat(vitDMcgMatch[1]) * 40;
+            }
+          }
+
+          console.log("Processed calcium/vitamin D values:", {
+            calcium: calciumValue,
+            vitaminD: vitDValue,
+          });
+
+          if (calciumValue && vitDValue) {
+            return [
+              {
+                original: medicationString,
+                values: [calciumValue, vitDValue],
+                units: ["mg", "unit"],
+                isCombination: true,
+                isCalciumVitD: true,
+                combinationType: "double",
+                fullMatch: medicationString,
+              },
+            ];
+          }
+        }
+
+        // ----- STANDARD VITAMIN D PROCESSING -----
+        // Only process as standalone vitamin D if not already processed as calcium/vitamin D
+        if (!isCalciumVitDResult && isVitaminD(medicationString)) {
+          console.log("Processing as vitamin D preparation");
+
+          // Look for dual-format expression - e.g., "800 Unit (20mcg)"
+          const dualFormatPattern =
+            /(\d+)\s*(?:unit|units?|iu|i\.u\.)\s*\((\d+(?:\.\d+)?)\s*(?:mc?g|µg)\)/i;
+          const dualMatch = medicationString.match(dualFormatPattern);
+
+          if (dualMatch) {
+            return [
+              {
+                original: dualMatch[0],
+                values: [parseFloat(dualMatch[1])], // Store unit value
+                units: ["unit"],
+                dualFormat: true,
+                mcgValue: parseFloat(dualMatch[2]),
+                isCombination: false,
+                combinationType: "single",
+                fullMatch: dualMatch[0],
+                isVitaminD: true,
+              },
+            ];
+          }
+
+          // Look for standalone unit measure - e.g., "800 unit", "800unit", or "1,000unit"
+          const unitPattern =
+            /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:unit|units?|iu|i\.u\.)\b/i;
+          const unitMatch = medicationString.match(unitPattern);
+
+          if (unitMatch) {
+            // Check that this is not part of a product name like "D3"
+            const index = medicationString.indexOf(unitMatch[1]);
+            const isPrecededByLetter =
+              index > 0 && /[A-Za-z]/.test(medicationString[index - 1]);
+
+            if (!isPrecededByLetter) {
+              // Clean the number (remove commas)
+              const cleanedNumber = sanitizeNumber(unitMatch[1]);
+              return [
+                {
+                  original: unitMatch[0],
+                  values: [parseFloat(cleanedNumber)],
+                  units: ["unit"],
+                  isCombination: false,
+                  combinationType: "single",
+                  fullMatch: unitMatch[0],
+                  isVitaminD: true,
+                },
+              ];
+            }
+          }
+          // Look for mcg measurement - e.g., "20 mcg"
+          const mcgPattern = /(\d+(?:\.\d+)?)\s*(?:mc?g|µg|ug|microgram)/i;
+          const mcgMatch = medicationString.match(mcgPattern);
+
+          if (mcgMatch) {
+            const mcgValue = parseFloat(mcgMatch[1]);
+            const unitValue = mcgValue * 40; // Convert mcg to units (1 mcg = 40 IU)
+
+            return [
+              {
+                original: mcgMatch[0],
+                values: [unitValue], // Store as unit equivalent for comparison
+                units: ["unit"],
+                mcgValue: mcgValue,
+                isCombination: false,
+                combinationType: "single",
+                fullMatch: mcgMatch[0],
+                isVitaminD: true,
+              },
+            ];
+          }
+        }
+
         // --- COMBINATION MEDICATION DETECTION ---
         // First try to detect if this is a combination product based on the medication dictionary
         const combinationDetectionResult =
@@ -5802,39 +5989,129 @@
               numberUnitPairs.push(parseFloat(match[1]));
             }
 
-            // For Trimbow, enforce the standard 87/5/9 pattern if we recognize it
-            if (
-              lowerMed.includes("trimbow") &&
-              numberUnitPairs.includes(87) &&
-              numberUnitPairs.includes(5) &&
-              numberUnitPairs.includes(9)
-            ) {
-              allNumbers = [87, 5, 9];
-            }
-            // Otherwise use the discovered numbers as long as we have enough
-            else if (numberUnitPairs.length >= 3) {
-              allNumbers = numberUnitPairs.slice(0, 3);
-            }
-            // Fall back to standard number extraction if needed
-            else {
-              allNumbers = medicationString.match(/\b\d+(?:\.\d+)?\b/g) || [];
-              // Filter out numbers that are part of words (like "parti3")
-              allNumbers = allNumbers.filter((num) => {
-                const numIndex = lowerMed.indexOf(num);
-                // Check character before the number (if not at beginning)
+            // For Trimbow, check for both standard patterns
+            if (lowerMed.includes("trimbow")) {
+              // Check for 87/5/9 pattern
+              if (
+                numberUnitPairs.includes(87) &&
+                numberUnitPairs.includes(5) &&
+                numberUnitPairs.includes(9)
+              ) {
+                allNumbers = [87, 5, 9];
+              }
+              // Check for 172/5/9 pattern
+              else if (
+                numberUnitPairs.includes(172) &&
+                numberUnitPairs.includes(5) &&
+                numberUnitPairs.includes(9)
+              ) {
+                allNumbers = [172, 5, 9];
+              }
+              // Otherwise use the discovered numbers as long as we have enough
+              else if (numberUnitPairs.length >= 3) {
+                allNumbers = numberUnitPairs.slice(0, 3);
+              }
+              // Fall back to standard number extraction if needed
+              else {
+                allNumbers = medicationString.match(/\b\d+(?:\.\d+)?\b/g) || [];
+                // Filter out numbers that are part of words (like "parti3")
+                allNumbers = allNumbers.filter((num) => {
+                  const numIndex = lowerMed.indexOf(num);
+                  // Check character before the number (if not at beginning)
+                  if (numIndex > 0) {
+                    if (/[a-z]/i.test(lowerMed.charAt(numIndex - 1))) {
+                      return false;
+                    }
+                  }
+                  // Check character after the number (if not at end)
+                  if (numIndex + num.length < lowerMed.length) {
+                    if (/[a-z]/i.test(lowerMed.charAt(numIndex + num.length))) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+              }
+            } else {
+              // For other medications, use improved number extraction that handles decimals AND units
+              // This regex will match numbers that may be followed by units like mcg, mg, etc.
+              const improvedNumberRegex =
+                /(\d+(?:\.\d+)?)(?=\s*(?:mcg|mg|microg|μg|ug|g|\/|\s|$))/g;
+              let match;
+              let numberMatches = [];
+
+              while (
+                (match = improvedNumberRegex.exec(medicationString)) !== null
+              ) {
+                const numString = match[1];
+                const numIndex = match.index;
+
+                // Check if the number is part of a word (like "parti3")
                 if (numIndex > 0) {
-                  if (/[a-z]/i.test(lowerMed.charAt(numIndex - 1))) {
-                    return false;
+                  const charBefore = medicationString.charAt(numIndex - 1);
+                  if (/[a-z]/i.test(charBefore)) {
+                    continue; // Skip if number is part of a word
                   }
                 }
-                // Check character after the number (if not at end)
-                if (numIndex + num.length < lowerMed.length) {
-                  if (/[a-z]/i.test(lowerMed.charAt(numIndex + num.length))) {
-                    return false;
-                  }
+
+                numberMatches.push(parseFloat(numString));
+                console.log(
+                  `Found number: ${numString} at position ${numIndex}`
+                );
+
+                // For triple combinations, stop after finding 3 numbers
+                if (
+                  combinationDetectionResult.componentCount === 3 &&
+                  numberMatches.length >= 3
+                )
+                  break;
+              }
+
+              // If we didn't find enough numbers with the strict regex, try a more permissive approach
+              if (
+                numberMatches.length < combinationDetectionResult.componentCount
+              ) {
+                console.log("Trying fallback number extraction");
+                numberMatches = [];
+
+                // Try slash-separated pattern first (like 7.2/5/160)
+                const slashPattern =
+                  /(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)(?:\/(\d+(?:\.\d+)?))?/;
+                const slashMatch = medicationString.match(slashPattern);
+
+                if (
+                  slashMatch &&
+                  combinationDetectionResult.componentCount === 3 &&
+                  slashMatch[3]
+                ) {
+                  numberMatches = [
+                    parseFloat(slashMatch[1]),
+                    parseFloat(slashMatch[2]),
+                    parseFloat(slashMatch[3]),
+                  ];
+                  console.log("Found slash-separated triple:", numberMatches);
+                } else if (
+                  slashMatch &&
+                  combinationDetectionResult.componentCount === 2
+                ) {
+                  numberMatches = [
+                    parseFloat(slashMatch[1]),
+                    parseFloat(slashMatch[2]),
+                  ];
+                  console.log("Found slash-separated double:", numberMatches);
+                } else {
+                  // Final fallback: extract all numbers regardless of context
+                  const allNumbersRegex = /\d+(?:\.\d+)?/g;
+                  const allFound =
+                    medicationString.match(allNumbersRegex) || [];
+                  numberMatches = allFound
+                    .slice(0, combinationDetectionResult.componentCount)
+                    .map(parseFloat);
+                  console.log("Fallback extraction found:", numberMatches);
                 }
-                return true;
-              });
+              }
+
+              allNumbers = numberMatches;
             }
           } else {
             // For other medications, use improved number extraction that handles decimals AND units
@@ -6043,10 +6320,30 @@
                   },
                 ];
               }
+              // Look for Trimbow's higher strength 172/5/9 pattern
+              else if (
+                numberUnitPairs.includes(172) &&
+                numberUnitPairs.includes(5) &&
+                numberUnitPairs.includes(9)
+              ) {
+                console.log("Found Trimbow higher strength 172/5/9 pattern");
+                return [
+                  {
+                    original: medicationString,
+                    values: [172, 5, 9],
+                    units: ["microg", "microg", "microg"],
+                    isCombination: true,
+                    combinationType: "triple",
+                    fullMatch: medicationString,
+                    isInhalerCombination: true,
+                  },
+                ];
+              }
             }
 
             // Try to find the three component pattern n/n/n in the string
-            const tripleSlashPattern = /(\d+)\/(\d+)\/(\d+)/;
+            const tripleSlashPattern =
+              /(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/;
             const slashMatch = lowerMed.match(tripleSlashPattern);
 
             if (slashMatch) {
@@ -6074,7 +6371,7 @@
             // Look for numbers with unit suffixes
             const numberWithUnitMatches = [];
             const numberWithUnitRegex =
-              /\b(\d+)(?:\s*(?:microg|mcg|μg|ug))?\b/g;
+              /\b(\d+(?:\.\d+)?)(?:\s*(?:microg|mcg|μg|ug))?\b/g;
             let match;
 
             // Find numbers that are followed by units and not part of words
@@ -6256,6 +6553,9 @@
           }
         }
 
+        // Continue with the rest of the original function...
+        // [Rest of the function remains the same from "Special handling for bracketed format" onwards]
+
         // Special handling for bracketed format with triple components
         if (medicationString.includes("[")) {
           const bracketContent = medicationString.match(/\[(.*?)\]/);
@@ -6291,201 +6591,6 @@
         }
 
         // ----- SPECIAL CASE DETECTION -----
-
-        // Check if this is a calcium/vitamin D combination
-        const isCalciumVitD = (med) => {
-          const lowerMed = med.toLowerCase();
-          return (
-            lowerMed.includes("calceos") ||
-            lowerMed.includes("adcal-d3") ||
-            lowerMed.includes("calcichew d3") ||
-            lowerMed.includes("calfovit d3") ||
-            lowerMed.includes("cacit d3") ||
-            lowerMed.includes("natecal") ||
-            lowerMed.includes("evacal d3") ||
-            lowerMed.includes("accrete d3") ||
-            // Look specifically for colecal
-            lowerMed.includes("colecal") ||
-            // Better pattern to match calcium + vitamin D
-            (lowerMed.includes("calcium") &&
-              (lowerMed.includes("vitamin d") ||
-                lowerMed.includes("colecal") ||
-                lowerMed.includes("d3") ||
-                lowerMed.includes("vit d")))
-          );
-        };
-
-        // Check if this is a vitamin D preparation
-        const isVitaminD = (med) => {
-          const lowerMed = med.toLowerCase();
-          return (
-            lowerMed.includes("vitamin d") ||
-            lowerMed.includes("colecalciferol") ||
-            lowerMed.includes("fultium") ||
-            lowerMed.includes("strivit") ||
-            lowerMed.includes("invita d3") ||
-            lowerMed.includes("thorens") ||
-            lowerMed.includes("stexerol") ||
-            lowerMed.includes("d3")
-          );
-        };
-
-        // ----- CALCIUM & VITAMIN D COMBINATIONS -----
-        const isCalciumVitDResult = isCalciumVitD(medicationString);
-
-        if (isCalciumVitDResult) {
-          console.log("Processing as calcium/vitamin D combination");
-
-          // Define patterns without lookaheads
-          const calciumPattern = /(\d+(?:\.\d+)?)\s*(?:mg|g|gram|grams)/i;
-          const vitDUnitPattern = /(\d+)\s*(?:unit|units?|iu|i\.u\.)/i;
-          const vitDMcgPattern = /(\d+)\s*(?:microg|mcg|μg|ug)/i;
-
-          // Try more specific patterns for standard formats
-          const formatPattern =
-            /(\d+(?:\.\d+)?)\s*mg.*?(?:\/|with|&).*?(\d+(?:\.\d+)?)\s*(unit|iu|mcg)/i;
-          const formatMatch = medicationString.match(formatPattern);
-
-          let calciumValue = null;
-          let vitDValue = null;
-
-          if (formatMatch) {
-            // Direct pattern match found
-            calciumValue = parseFloat(formatMatch[1]);
-            vitDValue = parseFloat(formatMatch[2]);
-
-            // Convert mcg to units if needed
-            if (formatMatch[3].toLowerCase().includes("mcg")) {
-              vitDValue *= 40; // 1 mcg = 40 units
-            }
-
-            console.log("Format pattern match:", { calciumValue, vitDValue });
-          } else {
-            // Try individual component matching
-            const calciumMatch = medicationString.match(calciumPattern);
-            const vitDUnitMatch = medicationString.match(vitDUnitPattern);
-            const vitDMcgMatch = medicationString.match(vitDMcgPattern);
-
-            console.log("Raw component matches:", {
-              calciumMatch,
-              vitDUnitMatch,
-              vitDMcgMatch,
-            });
-
-            // Extract calcium value
-            if (calciumMatch) {
-              calciumValue = parseFloat(calciumMatch[1]);
-              const unit = calciumMatch[0].toLowerCase();
-              // Convert grams to mg if needed
-              if (unit.includes("g") && !unit.includes("mg")) {
-                calciumValue *= 1000;
-              }
-            }
-
-            // Extract vitamin D value
-            if (vitDUnitMatch) {
-              vitDValue = parseFloat(vitDUnitMatch[1]);
-            } else if (vitDMcgMatch) {
-              // Convert mcg to units using the standard conversion
-              vitDValue = parseFloat(vitDMcgMatch[1]) * 40; // 1 mcg = 40 IU
-            }
-          }
-
-          console.log("Processed calcium/vitamin D values:", {
-            calcium: calciumValue,
-            vitaminD: vitDValue,
-          });
-
-          if (calciumValue && vitDValue) {
-            return [
-              {
-                original: medicationString,
-                values: [calciumValue, vitDValue],
-                units: ["mg", "unit"],
-                isCombination: true,
-                isCalciumVitD: true,
-                combinationType: "double",
-                fullMatch: medicationString,
-              },
-            ];
-          }
-        }
-
-        // ----- STANDARD VITAMIN D PROCESSING -----
-        // Only process as standalone vitamin D if not already processed as calcium/vitamin D
-        if (!isCalciumVitDResult && isVitaminD(medicationString)) {
-          console.log("Processing as vitamin D preparation");
-
-          // Look for dual-format expression - e.g., "800 Unit (20mcg)"
-          const dualFormatPattern =
-            /(\d+)\s*(?:unit|units?|iu|i\.u\.)\s*\((\d+(?:\.\d+)?)\s*(?:mc?g|µg)\)/i;
-          const dualMatch = medicationString.match(dualFormatPattern);
-
-          if (dualMatch) {
-            return [
-              {
-                original: dualMatch[0],
-                values: [parseFloat(dualMatch[1])], // Store unit value
-                units: ["unit"],
-                dualFormat: true,
-                mcgValue: parseFloat(dualMatch[2]),
-                isCombination: false,
-                combinationType: "single",
-                fullMatch: dualMatch[0],
-                isVitaminD: true,
-              },
-            ];
-          }
-
-          // Look for standalone unit measure - e.g., "800 unit", "800unit", or "1,000unit"
-          const unitPattern =
-            /(\d+(?:,\d+)*)(?:\s*)(?:unit|units?|iu|i\.u\.)\b/i;
-          const unitMatch = medicationString.match(unitPattern);
-
-          if (unitMatch) {
-            // Check that this is not part of a product name like "D3"
-            const index = medicationString.indexOf(unitMatch[1]);
-            const isPrecededByLetter =
-              index > 0 && /[A-Za-z]/.test(medicationString[index - 1]);
-
-            if (!isPrecededByLetter) {
-              // Clean the number (remove commas)
-              const cleanedNumber = sanitizeNumber(unitMatch[1]);
-              return [
-                {
-                  original: unitMatch[0],
-                  values: [parseFloat(cleanedNumber)],
-                  units: ["unit"],
-                  isCombination: false,
-                  combinationType: "single",
-                  fullMatch: unitMatch[0],
-                  isVitaminD: true,
-                },
-              ];
-            }
-          }
-          // Look for mcg measurement - e.g., "20 mcg"
-          const mcgPattern = /(\d+(?:\.\d+)?)\s*(?:mc?g|µg|ug|microgram)/i;
-          const mcgMatch = medicationString.match(mcgPattern);
-
-          if (mcgMatch) {
-            const mcgValue = parseFloat(mcgMatch[1]);
-            const unitValue = mcgValue * 40; // Convert mcg to units (1 mcg = 40 IU)
-
-            return [
-              {
-                original: mcgMatch[0],
-                values: [unitValue], // Store as unit equivalent for comparison
-                units: ["unit"],
-                mcgValue: mcgValue,
-                isCombination: false,
-                combinationType: "single",
-                fullMatch: mcgMatch[0],
-                isVitaminD: true,
-              },
-            ];
-          }
-        }
         // ----- STRENGTH RANGE HANDLING -----
         const strengthRange = parseStrengthRange(medicationString);
         if (strengthRange) {
@@ -7063,11 +7168,12 @@
               };
             },
           },
+          // Find this block towards the end of the `extractStrength` function
           {
             pattern: new RegExp(numberWithUnits, "i"),
             handler: (match) => {
-              if (!isStandaloneNumber(cleanedString, sanitizeNumber(match[1])))
-                return null;
+              // This is the corrected line:
+              if (!isStandaloneNumber(cleanedString, match[1])) return null;
               const [_, value, unit] = match;
               return {
                 original: match[0],
@@ -9245,6 +9351,9 @@
 
           // For all other medications, continue with the normal highlighting process
           const packSizePatterns = [
+            /(?:cream|gel|ointment|lotion|solution|suspension|emulsion)\s+\d+(?:\.\d+)?\s*(?:mg|mcg|µg|ug|g|gram|grams?)\s+(?:sachets?|packets?|tubes?|bottles?)(?:[\)\]]+)?/i,
+            /(?:cream|gel|ointment|lotion)\s+\d+\s*(?:mg|mcg|g)\s+sachets?(?:[\)\]]+)?/i,
+            /cream\s+\d+mg\s+sachets(?:[\)\]]+)?/i,
             /\(\d+\s*(?:PK|Pack|Packs?)\)/i,
             /\d+\s*(?:PK|Pack|Packs?)\b/i,
             /(?:PK|Pack|Packs?)\s*\d+/i,
@@ -10181,8 +10290,15 @@
         }
 
         function isNewMedication(text) {
+          const trimmedLine = text.trim();
+
+          // New caveat: A new medication cannot start with 'PRN Reason'
+          if (trimmedLine.toUpperCase().startsWith("PRN REASON")) {
+            return false;
+          }
+
           // Check for complete brackets or @ sign
-          if (hasCompleteBrackets(text) || text.includes("@")) {
+          if (hasCompleteBrackets(trimmedLine) || trimmedLine.includes("@")) {
             return true;
           }
 
@@ -10195,16 +10311,20 @@
             "ONE",
             "Taper",
           ];
-          const trimmedText = text.trim().toUpperCase();
+          const upperTrimmedLine = trimmedLine.toUpperCase();
 
           // Check if line ends with any trigger word
-          if (triggerWords.some((word) => trimmedText.endsWith(word))) {
+          if (triggerWords.some((word) => upperTrimmedLine.endsWith(word))) {
             return true;
           }
 
           // Also check if line contains any trigger word after a semicolon
-          if (text.includes(";")) {
-            const afterSemicolon = text.split(";").pop().trim().toUpperCase();
+          if (trimmedLine.includes(";")) {
+            const afterSemicolon = trimmedLine
+              .split(";")
+              .pop()
+              .trim()
+              .toUpperCase();
             if (triggerWords.some((word) => afterSemicolon.includes(word))) {
               return true;
             }
